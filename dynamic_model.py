@@ -26,7 +26,7 @@ class OneDimDynamic:
             print("Init system with default param: Ta = 0.1, Td = 0.1")
             init_system()
         # state := [s, v, a], control := [a_r]
-        self.state: np.array = init_state
+        self.state: np.ndarray = init_state
         self.save_trace = save_trace
         if save_trace:
             self.state_num = 1
