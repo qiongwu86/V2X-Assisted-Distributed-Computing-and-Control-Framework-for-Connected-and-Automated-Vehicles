@@ -21,6 +21,9 @@ class OneDimDynamic:
     SDIM = 3
     CDIM = 1
 
+    U_min = -3.0
+    U_max = +3.0
+
     def __init__(self, init_state: np.ndarray, Td: float = 0.1, Ta: float = 0.1, save_trace: bool = False) -> None:
         if not OneDimDynamic.sys_initd:
             print("Init system with default param: Ta = 0.1, Td = 0.1")
