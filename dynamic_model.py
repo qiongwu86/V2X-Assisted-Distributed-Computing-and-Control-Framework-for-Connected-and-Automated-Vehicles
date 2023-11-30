@@ -4,13 +4,13 @@ import scipy
 
 
 def init_system(Ta: float = 0.1, Td: float = 0.1):
-    OneDimDynamic._Ta = Ta
-    OneDimDynamic._Td = Td
-    OneDimDynamic.Ac = np.array([[0, 1, 0], [0, 0, 1], [0, 0, -1/OneDimDynamic._Ta]])
-    OneDimDynamic.Bc = np.array([[0], [0], [1/OneDimDynamic._Ta]])
+    OneDimDynamic.Ta = Ta
+    OneDimDynamic.Td = Td
+    OneDimDynamic.Ac = np.array([[0, 1, 0], [0, 0, 1], [0, 0, -1/OneDimDynamic.Ta]])
+    OneDimDynamic.Bc = np.array([[0], [0], [1/OneDimDynamic.Ta]])
     OneDimDynamic.Cc = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
     OneDimDynamic.Dc = np.array([[0], [0], [0]])
-    sys_d = scipy.signal.cont2discrete([OneDimDynamic.Ac, OneDimDynamic.Bc, OneDimDynamic.Cc, OneDimDynamic.Dc], OneDimDynamic._Td, "zoh")
+    sys_d = scipy.signal.cont2discrete([OneDimDynamic.Ac, OneDimDynamic.Bc, OneDimDynamic.Cc, OneDimDynamic.Dc], OneDimDynamic.Td, "zoh")
     OneDimDynamic.Ad, OneDimDynamic.Bd, OneDimDynamic.Cd, OneDimDynamic.Dd, _ = sys_d
     
 

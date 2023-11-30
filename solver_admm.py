@@ -3,6 +3,8 @@ import dynamic_model
 #from dynamic_model import OneDimDynamic
 import osqp
 from scipy import sparse
+import scipy.io
+from env import EnvParam
 
 SDIM = dynamic_model.OneDimDynamic.SDIM
 CDIM = dynamic_model.OneDimDynamic.CDIM
@@ -126,4 +128,91 @@ class SolverAdmm:
 
     def get_result(self):
         return self.x
+
+
+class WeightedADMM:
+    
+    make_A_D: bool = False
+    MatrixA: np.ndarray = None
+    MatrixD: np.ndarray = None
+    MatrixAD_dict: dict = None
+
+    all_solver: dict = {}
+    
+    def makeAD(all_data: dict) -> None:
+        if len(all_data) != 10:
+            raise NotImplementedError
+
+        if len(all_data) == 10:
+            ADmat = scipy.io.loadmat('ADsave/veh_5_5.mat')
+            WeightedADMM.MatrixA = ADmat['A']
+            WeightedADMM.MatrixD = ADmat['D'].diagonal()
+        main_set = [0, 1, 2, 3, 4]
+        merge_set = [5, 6, 7, 8, 9]
+        for id in all_data:
+            lane = all_data[id][0]
+            if lane == 'main':
+                WeightedADMM.MatrixAD_dict[id] = main_set.pop(0)
+            if lane == 'merge':
+                WeightedADMM.MatrixAD_dict[id] = merge_set.pop(0)
+        return
+    
+    def __init__(self,id:int, veh_num: int, T_nums: int, one_data: list) -> None:
+        if not WeightedADMM.make_A_D:
+            print("Uninitialize A and D")
+            raise ValueError
+
+        WeightedADMM.all_solver[id] = self
+        lane, t0, tf, to, x0, xf, iop, iof, oiop, oiof, trace = one_data
+        self.id = id
+        assert T_nums == trace.shape[0] / (SDIM+CDIM)
+        # variable
+        self.x: np.ndarray = np.zeros((T_nums * (SDIM+CDIM),))
+        self.y_self: np.ndarray = np.zeros((veh_num * T_nums,))
+        self.y_all: np.ndarray = np.zeros(veh_num, (veh_num*T_nums))
+        self.p: np.ndarray = np.zeros((veh_num * T_nums,))
+        self.v: np.ndarray = None
+        # hyper param
+        self.a_j: np.ndarray = WeightedADMM.MatrixA[WeightedADMM.MatrixA_dict[self.id]]
+        self.d_ii: float = WeightedADMM.MatrixD[WeightedADMM.MatrixD_dict[self.id]]
+        # matrix
+        self.ref_trace: np.ndarray = trace[CDIM+SDIM:]
+        self.b_i: np.ndarray = EnvParam.Dsafe * np.ones((veh_num * T_nums,)) / veh_num
+        self.A_i: np.ndarray = self.GenerateA_i(veh_num, T_nums, one_data)
+
+    def GenerateA_i(self, veh_num: int, T_nums: int, one_data: list) -> np.ndarray:
+        lane, t0, tf, to, x0, xf, iop, iof, oiop, oiof, trace = one_data
+        A_i = np.ndarray((T_nums * veh_num, T_nums * (CDIM + SDIM)))
+        temp = np.kron(np.eye(T_nums), np.diag((-1, 0, 0, 0)))
+        A_i[(self.id-1)*T_nums: self.id * T_nums] = -temp
+        A_i[(oiop[0]-1) * T_nums          : (oiop[0]-1) * T_nums + oiop[1]] = temp[       : oiop[1]]
+        A_i[(oiof[0]-1) * T_nums + oiof[1]:               oiof[0] * T_nums] = temp[oiof[1]:        ]
+        return A_i
+    # @staticmethod
+    # def generate_y_all(veh_num: int, y_shape: tuple) -> np.ndarray:
+        # result = np.zeros(veh_num)
+        # for i in range(veh_num):
+            # id = i+1
+            # result[id] = np.zeros(y_shape)
+        # return result
+
+    def _UpdateY(self, all_solver: list) -> None:
+        for id in all_solver:
+            self.y_all[id-1] = all_solver[id].y_self
+        
+    def Solve(self) -> None:
+        # for v
+        self.v = self.d_ii * self.y_self + self.a_j @ self.y_all - self.b_i - self.p
+        # qp for x, t
+        self.x, _ = self.SolveX()
+        # for y
+        self.y = np.clip(self.A_i @ self.x + self.v, 0, np.inf) / (2*self.d_ii)
+        # communicate
+        self._UpdateY(WeightedADMM.all_solver)
+        # for p
+        self.p = self.p + self.d_ii * self.y_self - self.a_j @ self.y_all
+        
+    def SolveX(self) -> tuple:
+        
+        pass
 

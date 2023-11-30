@@ -17,19 +17,24 @@ def generate_test_trace(T_nums: int, init_state: np.ndarray, final_state: np.nda
     print(ref_traj)
     return ref_traj
 
-def generate_trace(T_nums: int, k: float, T_a: float, t0: float, tf: float, x0: np.ndarray, xf: np.ndarray) -> np.ndarray:
-    c_i = edge_condition(k, T_a, t0, tf, x0, xf)
-    time_step_length = (tf - t0) / T_nums
-    trace = np.zeros((T_nums, SDIM+CDIM))
-    c1, c2, c3, c4, c5, c6 = c_i
-    s_t = lambda t: c1 * t**3 / (12*k) + c2 * t**2 / (4*k) + c5 * t + c6 - c3 * T_a ** 3 * math.exp(t/T_a) / (4*k) + c4 * T_a ** 2 * math.exp(-t/T_a)
-    v_t = lambda t: c1 * t**2 / (4*k) + c2 * t / (2*k) + c5 - c3 * T_a ** 2 * math.exp(t/T_a) / (4*k) - c4 * T_a * math.exp(-t/T_a)
-    for i in range(T_nums):
-        t = t0 + (i+1) * time_step_length
-        trace[i][0] = s_t(t)
-        trace[i][1] = v_t(t)
-    trace = trace.reshape((-1))
-    return trace
+def AddTrace(all_state_dict: dict, reshape: bool = True, k: float=1) -> None:
+    for id in all_state_dict:
+        lane, t0, tf, to, x0, xf, iop, iof, oiop, oiof = all_state_dict[id]
+        T_nums = int((tf - t0) / OneDimDynamic.Td) + 1
+        c_i = edge_condition(k, OneDimDynamic.Ta, t0, tf, x0, xf)
+        # T_nums include init point
+        trace = np.zeros((T_nums, SDIM+CDIM))
+        c1, c2, c3, c4, c5, c6 = c_i
+        s_t = lambda t: c1 * t**3 / (12*k) + c2 * t**2 / (4*k) + c5 * t + c6 - c3 * OneDimDynamic.Ta ** 3 * math.exp(t/OneDimDynamic.Ta) / (4*k) + c4 * OneDimDynamic.Ta ** 2 * math.exp(-t/OneDimDynamic.Ta)
+        v_t = lambda t: c1 * t**2 / (4*k) + c2 * t / (2*k) + c5 - c3 * OneDimDynamic.Ta ** 2 * math.exp(t/OneDimDynamic.Ta) / (4*k) - c4 * OneDimDynamic.Ta * math.exp(-t/OneDimDynamic.Ta)
+        for i in range(T_nums):
+            t = t0 + i * OneDimDynamic.Td
+            trace[i][0] = s_t(t)
+            trace[i][1] = v_t(t)
+        if reshape:
+            all_state_dict[id].append(trace.reshape((-1)))
+        else:
+            all_state_dict[id].append(trace)
         
 
 def edge_condition(k: float, T_a: float, t0: float, tf: float, x0: np.ndarray, xf: np.ndarray) -> np.ndarray:    
