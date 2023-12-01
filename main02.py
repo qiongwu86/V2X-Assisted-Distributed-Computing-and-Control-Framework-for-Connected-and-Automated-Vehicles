@@ -20,29 +20,46 @@ for _ in result:
 all_trace_main = []
 all_trace_merge = []
 AddTrace(result, reshape=True)
-# for id in result:
-    # lane, t0, tf, to, x0, xf, iop, iof, oiop, oiof, one_trace = result[id]
-    # # include init point
-    # # total_trace_length = int((tf - t0) / OneDimDynamic.Td) + 1
-    # if result[id][0] == "main":
-        # all_trace_main.append((to, one_trace[:, 0]))
-    # elif result[id][0] == "merge":
-        # all_trace_merge.append((to, one_trace[:, 0]))
-    # else:
-        # raise ValueError
+for id in result:
+    lane, t0, tf, to, x0, xf, iop, iof, oiop, oiof, one_trace = result[id]
+    # include init point
+    # total_trace_length = int((tf - t0) / OneDimDynamic.Td) + 1
+    if result[id][0] == "main":
+        one_trace = one_trace.reshape((-1, 4))
+        all_trace_main.append((to, one_trace[:, 0]))
+    elif result[id][0] == "merge":
+        one_trace = one_trace.reshape((-1, 4))
+        all_trace_merge.append((to, one_trace[:, 0]))
+    else:
+        raise ValueError
+for one_trace in all_trace_merge:
+    to, line = one_trace
+    to = to * 10
+    plt.plot(line, color="green")
+for one_trace in all_trace_main:
+    to, line = one_trace
+    to = to * 10
+    plt.plot(line, color="red")
+plt.savefig("figs/ref_trace.jpg")
+
 
 ProcessTrace(result)
 
 for _ in result:
     print("id: {0}, state {1}".format(_, result[_][:-1]))
 
-WeightedADMM.makeAD(result)
+graph = 'weighted'
+round = 10
+WeightedADMM.makeAD(result, graph)
 for id in result:
     WeightedADMM(id, len(result), result[id])
     
-for i in range(50):
+for i in range(round):
+    print('---------------------------------')
     for id in WeightedADMM.all_solver:
-        WeightedADMM.all_solver[id].Solve()
+        WeightedADMM.all_solver[id].SolveP1()
+    for id in WeightedADMM.all_solver:
+        WeightedADMM.all_solver[id].SolveP2()
     
 fig = plt.figure()
 for id in WeightedADMM.all_solver:
@@ -64,7 +81,7 @@ plt.plot([0, len(trace)], [0, 0], color='black')
 # plt.plot([0, 175], [0, 0], color='black')
 
 
-fig.savefig("test1.jpg")
+fig.savefig('figs/' + graph+"_test_"+str(round)+".jpg")
 # fig.show()
 
 

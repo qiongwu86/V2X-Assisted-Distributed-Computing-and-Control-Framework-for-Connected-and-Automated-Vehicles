@@ -5,6 +5,7 @@ import osqp
 from scipy import sparse
 import scipy.io
 from env import EnvParam
+from utilit import suppress_stdout_stderr
 
 SDIM = dynamic_model.OneDimDynamic.SDIM
 CDIM = dynamic_model.OneDimDynamic.CDIM
@@ -140,22 +141,22 @@ class WeightedADMM:
     MatrixD: np.ndarray = None
     MatrixAD_dict: dict = dict()
 
-    Q_x: np.ndarray = np.diag([1.0, 1.0, 0.0])
-    Q_u: np.ndarray = np.diag([0.0])
+    Q_x: np.ndarray = np.diag([5.0, 0.1, 0.1])
+    Q_u: np.ndarray = np.diag([0.1])
     Q_xu: np.ndarray = np.block([[                                   Q_x, np.zeros((Q_x.shape[0], Q_u.shape[1]))],
                                  [np.zeros((Q_u.shape[1], Q_x.shape[0])),                                    Q_u]])
 
     all_solver: dict = {}
     
-    def makeAD(all_data: dict) -> None:
+    def makeAD(all_data: dict, graph: str=None) -> None:
         WeightedADMM.make_A_D = True
         if len(all_data) != 10:
             raise NotImplementedError
 
         if len(all_data) == 10:
-            ADmat = scipy.io.loadmat('ADsave/veh_5_5_std.mat')
-            WeightedADMM.MatrixA = ADmat['A']
-            WeightedADMM.MatrixD = ADmat['D'].diagonal()
+            ADmat = scipy.io.loadmat('ADsave/veh_5_5_'+graph+'.mat')
+            WeightedADMM.MatrixA = 1 * ADmat['A']
+            WeightedADMM.MatrixD = 1 * ADmat['D'].diagonal()
         main_set = [0, 1, 2, 3, 4]
         merge_set = [5, 6, 7, 8, 9]
         for id in all_data:
@@ -208,7 +209,7 @@ class WeightedADMM:
     def GenerateA_i(self, one_data: list) -> np.ndarray:
         lane, t0, tf, to, x0, xf, iop, iof, oiop, oiof, trace = one_data
         A_i = np.zeros((self.T_nums * self.veh_num, self.T_nums * (CDIM + SDIM)))
-        temp = np.kron(np.eye(self.T_nums), np.array((-1, 0, 0, 0)))
+        temp = np.kron(np.eye(self.T_nums), np.array((1, 0, 0, 0)))
         if iop is not None:
             A_i[(self.id-1)*self.T_nums: (self.id-1)*self.T_nums + to] = -temp[: to]
         if iof is not None:
@@ -228,15 +229,21 @@ class WeightedADMM:
 
     def _UpdateY(self) -> None:
         for id in WeightedADMM.all_solver:
-            self.y_all[id-1] = WeightedADMM.all_solver[id].y_self
+            self.y_all[id-1] = WeightedADMM.all_solver[id].y_self.copy()
         
-    def Solve(self) -> None:
+    def SolveP1(self) -> None:
         # for v
         self.v = self.d_ii * self.y_self + self.a_j @ self.y_all - self.b_i - self.p
         # qp for x, t
+        t = self.x.copy()
         self.x, _ = self.SolveX()
+        # print(np.linalg.norm(t - self.x))
         # for y
-        self.y = np.clip(self.A_i @ self.x + self.v, -np.inf, 0) / (2*self.d_ii)
+        # t = np.clip(self.A_i @ self.x + self.v, -np.inf, 0) / (2*self.d_ii)
+        # print(np.linalg.norm(t - self.y_self))
+        self.y_self = np.clip(self.A_i @ self.x + self.v, -np.inf, 0) / (2*self.d_ii)
+        
+    def SolveP2(self) -> None:
         # communicate
         self._UpdateY()
         # for p
@@ -244,6 +251,7 @@ class WeightedADMM:
         
     def SolveX_Closure(self) -> tuple:
         Big_Q_ux = np.kron(np.eye(self.T_nums), WeightedADMM.Q_xu)
+        Big_Q_ux[-(CDIM+SDIM): , -(CDIM+SDIM): ] = WeightedADMM.Q_xu * 10
         t_dim = self.veh_num * self.T_nums
         J = np.block([[                            Big_Q_ux,   np.zeros((Big_Q_ux.shape[0], t_dim))],
                       [np.zeros((t_dim, Big_Q_ux.shape[1])),               np.zeros((t_dim, t_dim))]])
@@ -295,16 +303,18 @@ class WeightedADMM:
         
         P = sparse.csc_matrix(P)
         A = sparse.csc_matrix(A)
-        prob.setup(P, q, A, l, u)
+        with suppress_stdout_stderr():
+            prob.setup(P, q, A, l, u)
 
         def SolveX():
             nonlocal q_fun, prob, t_dim, K, L
 
             q = q_fun(K, L, self.v, self.d_ii)
             prob.update(q = q)
-            res = prob.solve()
+            with suppress_stdout_stderr():
+                res = prob.solve()
             res = np.array(res.x)
-            print('id', self.id)
+            # print('id', self.id)
             return res[: self.T_nums * (SDIM+CDIM)], res[-t_dim:]
 
         return SolveX
