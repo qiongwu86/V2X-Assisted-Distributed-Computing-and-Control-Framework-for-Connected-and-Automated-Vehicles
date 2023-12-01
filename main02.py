@@ -49,6 +49,8 @@ for id in WeightedADMM.all_solver:
     trace = WeightedADMM.all_solver[id].x.reshape((-1, 4))[:, 0]
     color = 'red' if WeightedADMM.all_solver[id].lane == 'main' else 'green'
     plt.plot(trace, color=color)
+
+plt.plot([0, len(trace)], [0, 0], color='black')
     # to, line = one_trace
     # to = to * 10
     # plt.plot(line, color="green")
