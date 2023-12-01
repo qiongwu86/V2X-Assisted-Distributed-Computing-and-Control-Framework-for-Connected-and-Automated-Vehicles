@@ -83,7 +83,7 @@ def GenerateSpecificTrace(main_num: int, merge_num: int, count: int = 10):
             else:
                 raise ValueError
         if main_num == main_ and merge_ == merge_num:
-            PickleSave(result, 'init_state.pkl')
+            PickleSave(result, 'init_state/init_state.pkl')
             print("complete")
             return
     print("Faile")

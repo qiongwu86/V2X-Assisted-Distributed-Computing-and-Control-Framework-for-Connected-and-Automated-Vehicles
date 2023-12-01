@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from dynamic_model import OneDimDynamic, init_system
 from utilit import ProcessTrace, PickleSave, PickleRead
 import pickle
-from solver_admm import WeightedADMM
+from solver_admm import WeightedADMM, FullADMM
 
 
 init_system()
@@ -48,8 +48,10 @@ ProcessTrace(result)
 for _ in result:
     print("id: {0}, state {1}".format(_, result[_][:-1]))
 
-graph = 'weighted'
-round = 10
+graph = 'full'
+round = 50
+
+#################
 WeightedADMM.makeAD(result, graph)
 for id in result:
     WeightedADMM(id, len(result), result[id])
@@ -61,13 +63,34 @@ for i in range(round):
     for id in WeightedADMM.all_solver:
         WeightedADMM.all_solver[id].SolveP2()
     
-fig = plt.figure()
-for id in WeightedADMM.all_solver:
-    trace = WeightedADMM.all_solver[id].x.reshape((-1, 4))[:, 0]
-    color = 'red' if WeightedADMM.all_solver[id].lane == 'main' else 'green'
-    plt.plot(trace, color=color)
+    if (i+1) % 10 == 0:
+        fig = plt.figure()
+        for id in WeightedADMM.all_solver:
+            trace = WeightedADMM.all_solver[id].x.reshape((-1, 4))[:, 0]
+            color = 'red' if WeightedADMM.all_solver[id].lane == 'main' else 'green'
+            plt.plot(trace, color=color)
+        plt.plot([0, len(trace)], [0, 0], color='black')
+        fig.savefig('figs/' + graph+"_test_"+str(i+1)+".jpg")
+#################
+# for id in result:
+    # FullADMM(id, len(result), result[id])
+    
+# for i in range(round):
+    # print('---------------------------------')
+    # for id in FullADMM.all_solver:
+        # FullADMM.all_solver[id].SolveP1()
+    # for id in FullADMM.all_solver:
+        # FullADMM.all_solver[id].SolveP2()
+    
+# fig = plt.figure()
+# for id in FullADMM.all_solver:
+    # trace = FullADMM.all_solver[id].x.reshape((-1, 4))[:, 0]
+    # color = 'red' if FullADMM.all_solver[id].lane == 'main' else 'green'
+    # plt.plot(trace, color=color)
 
-plt.plot([0, len(trace)], [0, 0], color='black')
+
+
+
     # to, line = one_trace
     # to = to * 10
     # plt.plot(line, color="green")
@@ -81,7 +104,6 @@ plt.plot([0, len(trace)], [0, 0], color='black')
 # plt.plot([0, 175], [0, 0], color='black')
 
 
-fig.savefig('figs/' + graph+"_test_"+str(round)+".jpg")
 # fig.show()
 
 

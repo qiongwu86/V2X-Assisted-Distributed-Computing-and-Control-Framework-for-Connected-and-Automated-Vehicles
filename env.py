@@ -5,8 +5,8 @@ from dynamic_model import OneDimDynamic
 class EnvParam:
 
     L1: float = 50
-    L2: float = 100
-    L3: float = 80
+    L2: float = 60
+    L3: float = 60
 
     Dsafe = 5
 
