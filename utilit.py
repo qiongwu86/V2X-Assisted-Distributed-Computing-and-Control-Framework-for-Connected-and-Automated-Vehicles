@@ -1,5 +1,6 @@
 import numpy as np
 from dynamic_model import OneDimDynamic
+import pickle
 
 
 def ProcessTrace(state_dict: dict):
@@ -27,4 +28,13 @@ def ProcessTrace(state_dict: dict):
             state_dict[id][9] = (oiof, state_dict[oiof][3])
 
 
+def PickleSave(obj, name: str) -> None:
+    with open(name, 'wb') as f:
+        pickle.dump(obj, f)
+
+
+def PickleRead(nama: str):
+    with open(nama, 'rb') as f:
+        obj = pickle.load(f)
+    return obj
         

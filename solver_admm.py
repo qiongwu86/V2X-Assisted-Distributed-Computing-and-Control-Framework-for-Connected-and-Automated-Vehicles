@@ -138,20 +138,22 @@ class WeightedADMM:
     make_A_D: bool = False
     MatrixA: np.ndarray = None
     MatrixD: np.ndarray = None
-    MatrixAD_dict: dict = None
+    MatrixAD_dict: dict = dict()
 
     Q_x: np.ndarray = np.diag([1.0, 1.0, 0.0])
     Q_u: np.ndarray = np.diag([0.0])
-    Q_xu: np.ndarray = np.diag((Q_x, Q_u))
+    Q_xu: np.ndarray = np.block([[                                   Q_x, np.zeros((Q_x.shape[0], Q_u.shape[1]))],
+                                 [np.zeros((Q_u.shape[1], Q_x.shape[0])),                                    Q_u]])
 
     all_solver: dict = {}
     
     def makeAD(all_data: dict) -> None:
+        WeightedADMM.make_A_D = True
         if len(all_data) != 10:
             raise NotImplementedError
 
         if len(all_data) == 10:
-            ADmat = scipy.io.loadmat('ADsave/veh_5_5.mat')
+            ADmat = scipy.io.loadmat('ADsave/veh_5_5_std.mat')
             WeightedADMM.MatrixA = ADmat['A']
             WeightedADMM.MatrixD = ADmat['D'].diagonal()
         main_set = [0, 1, 2, 3, 4]
@@ -164,42 +166,57 @@ class WeightedADMM:
                 WeightedADMM.MatrixAD_dict[id] = merge_set.pop(0)
         return
     
-    def __init__(self,id:int, veh_num: int, T_nums: int, one_data: list) -> None:
+    def __init__(self,id:int, veh_num: int, one_data: list) -> None:
         if not WeightedADMM.make_A_D:
             print("Uninitialize A and D")
             raise ValueError
 
-        self.veh_num = veh_num
-        self.T_nums = T_nums
-        WeightedADMM.all_solver[id] = self
         lane, t0, tf, to, x0, xf, iop, iof, oiop, oiof, trace = one_data
+        # base value
+        self.lane = lane
+        self.veh_num = veh_num
+        self.T_nums = int((trace.shape[0] - (SDIM + CDIM)) / (SDIM+CDIM)) # trace include init state
+        WeightedADMM.all_solver[id] = self
         self.id = id
         self.to = to
-        # variable
-        self.x: np.ndarray = np.zeros((T_nums * (SDIM+CDIM),))
-        self.y_self: np.ndarray = np.zeros((veh_num * T_nums,))
-        self.y_all: np.ndarray = np.zeros(veh_num, (veh_num*T_nums))
-        self.p: np.ndarray = np.zeros((veh_num * T_nums,))
-        self.v: np.ndarray = None
-        # hyper param
-        self.a_j: np.ndarray = WeightedADMM.MatrixA[WeightedADMM.MatrixA_dict[self.id]]
-        self.d_ii: float = WeightedADMM.MatrixD[WeightedADMM.MatrixD_dict[self.id]]
         # matrix
         self.ref_trace: np.ndarray = trace[CDIM+SDIM:]
         self.x0 = trace[:SDIM]
-        assert T_nums == self.ref_trace.shape[0] / (SDIM+CDIM)
-        self.b_i: np.ndarray = EnvParam.Dsafe * np.ones((veh_num * T_nums,)) / veh_num
-        self.A_i: np.ndarray = self.GenerateA_i(veh_num, T_nums, one_data)
+        self.b_i: np.ndarray = self.Generateb_i(one_data)
+        self.A_i: np.ndarray = self.GenerateA_i(one_data)
+        # variable
+        self.x: np.ndarray = np.zeros((self.T_nums * (SDIM+CDIM),))
+        self.y_self: np.ndarray = np.zeros((veh_num * self.T_nums,))
+        self.y_all: np.ndarray = np.zeros((veh_num, veh_num*self.T_nums))
+        self.p: np.ndarray = np.zeros((veh_num * self.T_nums,))
+        self.v: np.ndarray = -self.b_i
+        # hyper param
+        self.a_j: np.ndarray = WeightedADMM.MatrixA[WeightedADMM.MatrixAD_dict[self.id]]
+        self.d_ii: float = WeightedADMM.MatrixD[WeightedADMM.MatrixAD_dict[self.id]]
         # solverx
         self.SolveX = self.SolveX_Closure()
 
-    def GenerateA_i(self, veh_num: int, T_nums: int, one_data: list) -> np.ndarray:
+    def Generateb_i(self, one_data: list) -> np.ndarray:
         lane, t0, tf, to, x0, xf, iop, iof, oiop, oiof, trace = one_data
-        A_i = np.ndarray((T_nums * veh_num, T_nums * (CDIM + SDIM)))
-        temp = np.kron(np.eye(T_nums), np.diag((-1, 0, 0, 0)))
-        A_i[(self.id-1)*T_nums: self.id * T_nums] = -temp
-        A_i[(oiop[0]-1) * T_nums          : (oiop[0]-1) * T_nums + oiop[1]] = temp[       : oiop[1]]
-        A_i[(oiof[0]-1) * T_nums + oiof[1]:               oiof[0] * T_nums] = temp[oiof[1]:        ]
+        b_i = np.zeros((self.T_nums * self.veh_num))
+        if iop is not None:
+            b_i[(self.id-1)*self.T_nums: (self.id-1)*self.T_nums + to] = EnvParam.Dsafe
+        if iof is not None:
+            b_i[(self.id-1)*self.T_nums+to: self.id * self.T_nums] = EnvParam.Dsafe
+        return b_i
+    
+    def GenerateA_i(self, one_data: list) -> np.ndarray:
+        lane, t0, tf, to, x0, xf, iop, iof, oiop, oiof, trace = one_data
+        A_i = np.zeros((self.T_nums * self.veh_num, self.T_nums * (CDIM + SDIM)))
+        temp = np.kron(np.eye(self.T_nums), np.array((-1, 0, 0, 0)))
+        if iop is not None:
+            A_i[(self.id-1)*self.T_nums: (self.id-1)*self.T_nums + to] = -temp[: to]
+        if iof is not None:
+            A_i[(self.id-1)*self.T_nums+to: self.id * self.T_nums] = -temp[to: ]
+        if oiop is not None:
+            A_i[(oiop[0]-1) * self.T_nums          : (oiop[0]-1) * self.T_nums + oiop[1]] = temp[       : oiop[1]]
+        if oiof is not None:
+            A_i[(oiof[0]-1) * self.T_nums + oiof[1]:               oiof[0] * self.T_nums] = temp[oiof[1]:        ]
         return A_i
     # @staticmethod
     # def generate_y_all(veh_num: int, y_shape: tuple) -> np.ndarray:
@@ -209,9 +226,9 @@ class WeightedADMM:
             # result[id] = np.zeros(y_shape)
         # return result
 
-    def _UpdateY(self, all_solver: list) -> None:
-        for id in all_solver:
-            self.y_all[id-1] = all_solver[id].y_self
+    def _UpdateY(self) -> None:
+        for id in WeightedADMM.all_solver:
+            self.y_all[id-1] = WeightedADMM.all_solver[id].y_self
         
     def Solve(self) -> None:
         # for v
@@ -221,23 +238,22 @@ class WeightedADMM:
         # for y
         self.y = np.clip(self.A_i @ self.x + self.v, -np.inf, 0) / (2*self.d_ii)
         # communicate
-        self._UpdateY(WeightedADMM.all_solver)
+        self._UpdateY()
         # for p
         self.p = self.p + self.d_ii * self.y_self - self.a_j @ self.y_all
         
     def SolveX_Closure(self) -> tuple:
         Big_Q_ux = np.kron(np.eye(self.T_nums), WeightedADMM.Q_xu)
         t_dim = self.veh_num * self.T_nums
-        J = np.block([[                            Big_Q_ux, np.zeros((Big_Q_ux.shape[0], t_dim))],
-                      [np.zeros((t_dim, Big_Q_ux.shape[1])),               np.zeros(t_dim, t_dim)]])
+        J = np.block([[                            Big_Q_ux,   np.zeros((Big_Q_ux.shape[0], t_dim))],
+                      [np.zeros((t_dim, Big_Q_ux.shape[1])),               np.zeros((t_dim, t_dim))]])
         K = np.block([-2 * self.ref_trace @ Big_Q_ux, np.zeros(t_dim)])
-        L = np.block([[                            self.A_i, np.zeros((self.A_i.shape[0], t_dim))],
-                      [np.zeros((t_dim, self.A_i.shape[1])),                       -np.eye(t_dim)]])
+        L = np.block([self.A_i, -np.eye(t_dim)])
         
         P = 2 * (J + L.transpose() @ L * (1/self.d_ii))
-        q_fun = lambda K, v, d_ii: K + (1/(2*d_ii)) * v
+        q_fun = lambda K, L, v, d_ii: K + (1/(2*d_ii)) * v @ L
         
-        C_U_A = np.block([np.kron(np.eye(self.T_nums), np.diag([0, 0, 0, 1]), np.zeros((self.T_nums, t_dim)))])
+        C_U_A = np.block([np.kron(np.eye(self.T_nums), np.array([0, 0, 0, 1])), np.zeros((self.T_nums, t_dim))])
         C_U_l = U_min * np.ones(self.T_nums)
         C_U_u = U_max * np.ones(self.T_nums)
 
@@ -253,17 +269,17 @@ class WeightedADMM:
         B = np.zeros((self.T_nums*SDIM, SDIM))
         for i in range(self.T_nums):
             B[i*SDIM: (i+1)*SDIM, :] = np.linalg.matrix_power(dynamic_model.OneDimDynamic.Ad, i+1)
-        C_D_A = np.block([G + T3, np.zeros(self.T_nums * SDIM, t_dim)])
+        C_D_A = np.block([G + T3, np.zeros((self.T_nums * SDIM, t_dim))])
         C_D_l = B @ self.x0
         C_D_u = C_D_l
         
         C_X_A = np.zeros((2, self.T_nums * (CDIM + SDIM) + t_dim))
-        C_X_A[0, self.to] = 1
-        C_X_A[1, self.to+1] = 1
+        C_X_A[0, self.to * (CDIM + SDIM)] = 1
+        C_X_A[1, (self.to+1) * (CDIM + SDIM)] = 1
         C_X_l = np.array([-np.inf, 0])
         C_X_u = np.array([0, +np.inf])
 
-        C_T_A = np.block([np.zeros(t_dim, self.T_nums * (CDIM + SDIM)), np.eye(t_dim)])
+        C_T_A = np.block([np.zeros((t_dim, self.T_nums * (CDIM + SDIM))), np.eye(t_dim)])
         C_T_l = np.zeros((t_dim,))
         C_T_u = np.ones((t_dim,)) * np.inf
 
@@ -274,18 +290,22 @@ class WeightedADMM:
         l = np.block([C_U_l, C_D_l, C_X_l, C_T_l])
         u = np.block([C_U_u, C_D_u, C_X_u, C_T_u])
 
-        q = q_fun(K, self.v, self.d_ii)
+        q = q_fun(K, L, self.v, self.d_ii)
         prob = osqp.OSQP()
+        
+        P = sparse.csc_matrix(P)
+        A = sparse.csc_matrix(A)
         prob.setup(P, q, A, l, u)
 
         def SolveX():
-            nonlocal P, q_fun, A, l, u, prob, t_dim
+            nonlocal q_fun, prob, t_dim, K, L
 
-            q = q_fun(K, self.v, self.d_ii)
+            q = q_fun(K, L, self.v, self.d_ii)
             prob.update(q = q)
             res = prob.solve()
             res = np.array(res.x)
-            return res[:, self.T_nums * (SDIM+CDIM)], res[-t_dim:]
+            print('id', self.id)
+            return res[: self.T_nums * (SDIM+CDIM)], res[-t_dim:]
 
         return SolveX
         

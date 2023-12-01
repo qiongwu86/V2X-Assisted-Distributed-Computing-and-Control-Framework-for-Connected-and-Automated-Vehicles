@@ -6,7 +6,7 @@ class EnvParam:
 
     L1: float = 50
     L2: float = 50
-    L3: float = L1
+    L3: float = 60
 
     Dsafe = 5
 
