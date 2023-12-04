@@ -48,7 +48,7 @@ ProcessTrace(result)
 for _ in result:
     print("id: {0}, state {1}".format(_, result[_][:-1]))
 
-graph = 'full'
+graph = 'weighted'
 round = 50
 
 #################

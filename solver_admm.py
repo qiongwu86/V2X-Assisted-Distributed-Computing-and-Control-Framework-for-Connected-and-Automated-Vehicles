@@ -155,8 +155,12 @@ class WeightedADMM:
 
         if len(all_data) == 10:
             ADmat = scipy.io.loadmat('ADsave/veh_5_5_'+graph+'.mat')
-            WeightedADMM.MatrixA = 0.05 * ADmat['A']
-            WeightedADMM.MatrixD = 0.05 * ADmat['D'].diagonal()
+            if graph == 'full':
+                WeightedADMM.MatrixA = 0.05 * ADmat['A']
+                WeightedADMM.MatrixD = 0.05 * ADmat['D'].diagonal()
+            else:
+                WeightedADMM.MatrixA =  ADmat['A']
+                WeightedADMM.MatrixD =  ADmat['D'].diagonal()
         main_set = [0, 1, 2, 3, 4]
         merge_set = [5, 6, 7, 8, 9]
         for id in all_data:
