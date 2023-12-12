@@ -3,6 +3,8 @@ import numpy as np
 from dynamic_model import OneDimDynamic
 import pickle
 from env import EnvParam
+from matplotlib import pyplot as plt
+from matplotlib import animation, rc, patches
 
 
 def ProcessTrace(state_dict: dict):
@@ -89,4 +91,102 @@ def GenerateSpecificTrace(main_num: int, merge_num: int, count: int = 10):
     print("Faile")
 
         
+class SceneDraw:
+
+    L = 4.5
+    W = 2.0
+
+    L_ = L/2
+    W_ = W/2
+
+    pos_tran = lambda x, y, phi : (x+SceneDraw.W_ * np.sin(phi), y-SceneDraw.W_*np.cos(phi))
+
+
+    def __init__(self, car_nums: int, traj_len:int, car_trajs: dict[int, dict['X': np.ndarray, 'U': np.ndarray, 'lane': str]]) -> None:
+        assert car_nums == len(car_trajs)
+        self.car_nums = car_nums
+        self.car_trajs = car_trajs
+        self.traj_len = traj_len
+        for id in self.car_trajs:
+            traj = car_trajs[id]
+            assert self.traj_len == traj['X'].shape[0]
+
+        self.car_objs = {id: patches.Rectangle((0, 0), SceneDraw.L, SceneDraw.W, fc='None') for id in car_trajs}
+        def init_cars():
+            for id in self.car_trajs:
+                x, y, phi = self.car_trajs[id]['X'][0][0: 3]
+                self.car_objs[id].set_xy(SceneDraw.pos_tran(x, y, phi))
+                self.car_objs[id].set_angle(np.rad2deg(phi))
+                if self.car_trajs[id]['lane'] == 'main':
+                    self.car_objs[id].set_edgecolor('red')
+                else:
+                    self.car_objs[id].set_edgecolor('green')
+            return
+        init_cars()
+
+    def GenVideo(self):
+        fig, ax = plt.subplots()
+        bg = patches.Rectangle((-50, -20), 220, 100, fc='black')
+        ax.add_patch(bg)
+        for id in self.car_objs:
+            ax.add_patch(self.car_objs[id])
+
+        def update(frame):
+            for id in self.car_objs:
+                x, y, phi, _ = self.car_trajs[id]['X'][frame]
+                self.car_objs[id].set_xy(SceneDraw.pos_tran(x, y, phi))
+                self.car_objs[id].set_angle(np.rad2deg(phi))
+            plt.xlim(-50, 60)
+            plt.ylim(-20, 10)
+            ax.set_aspect('equal')
+            ax.margins(0)
+
+        anim = animation.FuncAnimation(fig, update, frames=self.traj_len, interval=100)
+        writer = animation.FFMpegWriter(fps=10)
+        anim.save('video/animation.mp4', writer=writer)
+        plt.close()
+        
+    
+class WatchOneVeh:
+
+    L = 4.5
+    W = 2.0
+
+    L_ = L/2
+    W_ = W/2
+
+    pos_tran = lambda x, y, phi : (x+SceneDraw.W_ * np.sin(phi), y-SceneDraw.W_*np.cos(phi))
+    def __init__(self, one_trace: np.ndarray) -> None:
+        self.one_trace = one_trace
+        self.traj_len = one_trace.shape[0]
+        self.car = patches.Rectangle((0, 0), WatchOneVeh.L, WatchOneVeh.W, fc='None', ec='red')
+        self.x_lim_len = 10
+        self.y_lim_len = 10
+        self.x_lim_fun = lambda Xt: (Xt[0] - 0.5*self.x_lim_len, Xt[0] + 0.5*self.x_lim_len)
+        self.y_lim_fun = lambda Xt: (Xt[1] - 0.5*self.y_lim_len, Xt[1] + 0.5*self.y_lim_len)
+
+    def DrawVideo(self):
+        fig, ax = plt.subplots()
+        ax.add_patch(self.car)
+
+        def update(frame):
+            x, y, phi, v = self.one_trace[frame]
+            self.car.set_xy(WatchOneVeh.pos_tran(x, y, phi))
+            self.car.set_angle(np.rad2deg(phi))
+
+            # plt.xlim(self.x_lim_fun((x, y)))
+            # plt.ylim(self.y_lim_fun((x, y)))
+            plt.xlim(-50, 50)
+            plt.ylim(-50, 50)
+
+            ax.set_aspect('equal')
+            ax.margins(0)
+        
+        anim = animation.FuncAnimation(fig, update, frames=self.traj_len, interval=100)
+        writer = animation.FFMpegWriter(fps=10)
+        anim.save('video/one_veh.mp4', writer=writer)
+        plt.close()
+
+        
+    
     

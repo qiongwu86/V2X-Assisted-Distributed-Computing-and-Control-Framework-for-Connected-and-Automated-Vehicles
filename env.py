@@ -5,7 +5,7 @@ from dynamic_model import OneDimDynamic
 class EnvParam:
 
     L1: float = 50
-    L2: float = 60
+    L2: float = 30
     L3: float = 60
 
     Dsafe = 5
@@ -13,7 +13,7 @@ class EnvParam:
     InitPosRandRange: np.ndarray = np.array([-5, 5])
 
     InitVelocity: float = 10.0
-    InitVelocityRandRange: np.ndarray = np.array([-3, 3])
+    InitVelocityRandRange: np.ndarray = np.array([-5, 5])
     InitDensity: float = 0.08
     InitDensityRandRange: np.ndarray = np.array([-0.05, 0.05])
 

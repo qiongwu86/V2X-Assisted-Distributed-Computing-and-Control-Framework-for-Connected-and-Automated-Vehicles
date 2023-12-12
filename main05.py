@@ -68,3 +68,4 @@ for i in range(round):
         plt.plot([0, len(trace)], [0, 0], color='black')
         fig.savefig('figs/' + "full" +"_test_"+str(i+1)+".jpg")
     
+

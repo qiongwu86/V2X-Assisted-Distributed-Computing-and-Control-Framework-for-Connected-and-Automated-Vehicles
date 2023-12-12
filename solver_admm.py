@@ -335,42 +335,62 @@ class FullADMM:
 
     all_solver: dict = {}
     
-    def __init__(self,id:int, veh_num: int, one_data: list) -> None:
+    def __init__(self,id:int, veh_num: int, one_data: list, X_constrain: bool=True) -> None:
 
-        self.d_i = veh_num - 1
-        lane, t0, tf, to, x0, xf, iop, iof, oiop, oiof, trace = one_data
-        # base value
-        self.lane = lane
-        self.veh_num = veh_num
-        self.T_nums = int((trace.shape[0] - (SDIM + CDIM)) / (SDIM+CDIM)) # trace include init state
+        self.X_constrain = X_constrain
+
         FullADMM.all_solver[id] = self
+        # base value
         self.id = id
-        self.to = to
-        # matrix
-        self.ref_trace: np.ndarray = trace[CDIM+SDIM:]
-        self.x0 = trace[:SDIM]
-        self.b_i: np.ndarray = self.Generateb_i(one_data)
-        self.A_i: np.ndarray = self.GenerateA_i(one_data)
+        self.veh_num = veh_num
+        self.lane, self.t0, self.tf, self.to, self.x0, self.xf, self.iop, self.iof, self.oiop, self.oiof, self.trace = one_data
+        self.d_i = veh_num - 1
+        # others
+        self.T_nums: int = int((self.trace.shape[0] - (SDIM + CDIM)) / (SDIM+CDIM)) # trace include init state
+        self.x0: np.ndarray = self.trace[:SDIM]
+        self.ref_trace: np.ndarray = self.trace[CDIM+SDIM:]
+        if self.X_constrain:
+            self.b_i: np.ndarray = self._Generateb_i(one_data)
+            self.A_i: np.ndarray = self._GenerateA_i(one_data)
+        else:
+            self.b_i: np.ndarray = self._Generateb_i_new(one_data)
+            self.A_i: np.ndarray = self._GenerateA_i_new(one_data)
         # variable
         self.x: np.ndarray = np.zeros((self.T_nums * (SDIM+CDIM),))
         self.y_self: np.ndarray = np.zeros((veh_num * self.T_nums,))
         self.y_all: np.ndarray = np.zeros((veh_num, veh_num*self.T_nums))
         self.p: np.ndarray = np.zeros((veh_num * self.T_nums,))
-        self.v: np.ndarray = -self.b_i
+        self.v: np.ndarray = np.zeros((veh_num * self.T_nums,))
         # solverx
         self.SolveX = self.SolveX_Closure()
 
-    def Generateb_i(self, one_data: list) -> np.ndarray:
+    def _Generateb_i_new(self, one_data: list) -> np.ndarray:
+        lane, t0, tf, to, x0, xf, iop, iof, oiop, oiof, trace = one_data
+        b_i = np.zeros((self.T_nums * self.veh_num))
+        if iop is not None:
+            b_i[(self.id-1)*self.T_nums: self.id*self.T_nums] = EnvParam.Dsafe
+        return b_i
+    
+    def _GenerateA_i_new(self, one_data: list) -> np.ndarray:
+        lane, t0, tf, to, x0, xf, iop, iof, oiop, oiof, trace = one_data
+        A_i = np.zeros((self.T_nums * self.veh_num, self.T_nums * (CDIM + SDIM)))
+        temp = np.kron(np.eye(self.T_nums), np.array((1, 0, 0, 0)))
+        if iop is not None:
+            A_i[(self.id-1) * self.T_nums: self.id*self.T_nums] = -temp
+        if oiop is not None:
+            A_i[(oiop[0]-1) * self.T_nums: oiop[0] * self.T_nums ] = temp
+        return A_i
+
+    def _Generateb_i(self, one_data: list) -> np.ndarray:
         lane, t0, tf, to, x0, xf, iop, iof, oiop, oiof, trace = one_data
         b_i = np.zeros((self.T_nums * self.veh_num))
         if iop is not None:
             b_i[(self.id-1)*self.T_nums: (self.id-1)*self.T_nums + to] = EnvParam.Dsafe
         if iof is not None:
             b_i[(self.id-1)*self.T_nums+to: self.id * self.T_nums] = EnvParam.Dsafe
-        np.save("d_{0}".format(self.id), b_i)
         return b_i
     
-    def GenerateA_i(self, one_data: list) -> np.ndarray:
+    def _GenerateA_i(self, one_data: list) -> np.ndarray:
         lane, t0, tf, to, x0, xf, iop, iof, oiop, oiof, trace = one_data
         A_i = np.zeros((self.T_nums * self.veh_num, self.T_nums * (CDIM + SDIM)))
         temp = np.kron(np.eye(self.T_nums), np.array((1, 0, 0, 0)))
@@ -382,28 +402,26 @@ class FullADMM:
             A_i[(oiop[0]-1) * self.T_nums          : (oiop[0]-1) * self.T_nums + oiop[1]] = temp[       : oiop[1]]
         if oiof is not None:
             A_i[(oiof[0]-1) * self.T_nums + oiof[1]:               oiof[0] * self.T_nums] = temp[oiof[1]:        ]
-        np.save("A_{0}".format(self.id), A_i)
         return A_i
 
-    def _UpdateY(self) -> None:
+    def UpdateY(self) -> None:
         for id in FullADMM.all_solver:
             self.y_all[id-1] = FullADMM.all_solver[id].y_self.copy()
         
-    def SolveP2(self) -> None:
+    def Solve(self) -> None:
+        # communicate
+        # self._UpdateY()
+        # for p
+        self.p = self.p + FullADMM.rho *((self.d_i+1) * self.y_self - sum(self.y_all))
         # for v
-        self.v = FullADMM.rho * (self.d_i * self.y_self + sum(self.y_all)) - self.b_i - self.p
+        self.v = FullADMM.rho * ((self.d_i-1) * self.y_self + sum(self.y_all)) - self.b_i - self.p
         # qp for x, t
         self.x, _ = self.SolveX()
         # for y
-        self.y_self = np.clip(self.A_i @ self.x + self.v, -np.inf, 0) / (2*self.d_ii)
-        
-    def SolveP1(self) -> None:
-        # communicate
-        self._UpdateY()
-        # for p
-        self.p = self.p + FullADMM.rho * (self.d_i * self.y_self - sum(self.y_all))
+        self.y_self = np.clip(self.A_i @ self.x + self.v, -np.inf, 0) / (2*self.rho*self.d_i)
         
     def SolveX_Closure(self) -> tuple:
+        # calculate P
         Big_Q_ux = np.kron(np.eye(self.T_nums), FullADMM.Q_xu)
         Big_Q_ux[-(CDIM+SDIM): , -(CDIM+SDIM): ] = FullADMM.Q_xu * 10
         t_dim = self.veh_num * self.T_nums
@@ -411,14 +429,17 @@ class FullADMM:
                       [np.zeros((t_dim, Big_Q_ux.shape[1])),               np.zeros((t_dim, t_dim))]])
         K = np.block([-2 * self.ref_trace @ Big_Q_ux, np.zeros(t_dim)])
         L = np.block([self.A_i, -np.eye(t_dim)])
+        P = 2 * (J + (1/(4 * self.d_i * self.rho)) * L.transpose() @ L)
+
+        # q change every time
+        q_fun = lambda K, L, v: K + (0.5/(self.d_i * self.rho)) * v @ L
         
-        P = 2 * (J + L.transpose() @ L * (1/(self.d_i * self.rho)))
-        q_fun = lambda K, L, v: K + (1/(2*(self.d_i * self.rho))) * v @ L
-        
+        # input constrain
         C_U_A = np.block([np.kron(np.eye(self.T_nums), np.array([0, 0, 0, 1])), np.zeros((self.T_nums, t_dim))])
         C_U_l = U_min * np.ones(self.T_nums)
         C_U_u = U_max * np.ones(self.T_nums)
 
+        # dynamic constrain
         T1 = np.eye(self.T_nums)
         T2 = np.concatenate((np.eye(SDIM), -dynamic_model.OneDimDynamic.Bd), axis=1)
         T3 = np.kron(T1, T2)
@@ -435,22 +456,31 @@ class FullADMM:
         C_D_l = B @ self.x0
         C_D_u = C_D_l
         
+        # state constain
         C_X_A = np.zeros((2, self.T_nums * (CDIM + SDIM) + t_dim))
         C_X_A[0, self.to * (CDIM + SDIM)] = 1
         C_X_A[1, (self.to+1) * (CDIM + SDIM)] = 1
         C_X_l = np.array([-np.inf, 0])
         C_X_u = np.array([0, +np.inf])
 
+        # constrain of t in cone
         C_T_A = np.block([np.zeros((t_dim, self.T_nums * (CDIM + SDIM))), np.eye(t_dim)])
         C_T_l = np.zeros((t_dim,))
         C_T_u = np.ones((t_dim,)) * np.inf
 
-        A = np.block([[C_U_A],
-                      [C_D_A],
-                      [C_X_A],
-                      [C_T_A]])
-        l = np.block([C_U_l, C_D_l, C_X_l, C_T_l])
-        u = np.block([C_U_u, C_D_u, C_X_u, C_T_u])
+        if self.X_constrain:
+            A = np.block([[C_U_A],
+                        [C_D_A],
+                        [C_X_A],
+                        [C_T_A]])
+            l = np.block([C_U_l, C_D_l, C_X_l, C_T_l])
+            u = np.block([C_U_u, C_D_u, C_X_u, C_T_u])
+        else:
+            A = np.block([[C_U_A],
+                        [C_D_A],
+                        [C_T_A]])
+            l = np.block([C_U_l, C_D_l, C_T_l])
+            u = np.block([C_U_u, C_D_u, C_T_u])
 
         q = q_fun(K, L, self.v)
         prob = osqp.OSQP()
@@ -474,4 +504,105 @@ class FullADMM:
         return SolveX
         
 
+class ILMPC:
+
+    CDIM = dynamic_model.BicycleModel.CDIM
+    SDIM = dynamic_model.BicycleModel.SDIM
+    
+    def __init__(self, x0: np.ndarray, run_times: int, x_ref: np.ndarray, pred_len: int = 30) -> None:
+        self.current_time = 0
+        self.x_current = x0
+        self.x_ref_origin = x_ref
+        self.x_ref_current = self.x_ref_origin[self.current_time+1: self.current_time + pred_len + 1]
+        self.ref_len = x_ref.shape[0]
+        self.pred_len = pred_len
+        self.run_times = run_times
+        assert self.ref_len >= run_times + pred_len
+        self.nominal_traj = self.GenNominalTraj(x0, 0, self.pred_len)
+        self.Step = self.InitStep()
+
+    def GenNominalTraj(self, x0: np.ndarray, u_bar: np.ndarray, T_nums: int) -> tuple:
+        if u_bar == 0:
+            u_bar = np.zeros((T_nums, CDIM))
+        else:
+            assert T_nums == len(u_bar)
+        x_bar = dynamic_model.BicycleModel.roll(x0, u_bar, T_nums)[:-1]
+        assert x_bar.shape[0] == u_bar.shape[0] == T_nums
+        return (x_bar, u_bar)
+
+    def InitStep(self):
+        prob = osqp.OSQP()
+        AA, BB, GG = dynamic_model.BicycleModel.MakeDynamicConstrain(self.x_current, self.nominal_traj[1], self.pred_len)
+        Qx = np.eye(4)
+        Qu = np.eye(2)
+        P = BB.transpose() @ np.kron(np.eye(self.pred_len), Qx) @ BB + np.kron(np.eye(self.pred_len), Qu)
+        P = sparse.csc_matrix(P)
+        q = BB.transpose() @ np.kron(np.eye(self.pred_len), Qx) @ (AA @ self.x_current + GG - self.x_ref_current)
+
+        Ax = BB
+        Au = np.eye(self.pred_len + dynamic_model.BicycleModel.SDIM)
+        A = np.block([[Ax], [Au]])
+        A = sparse.csc_matrix(A)
+        
+        lx = np.ones((dynamic_model.BicycleModel.SDIM * self.pred_len,)) * -np.inf
+        lu = np.kron(np.ones((self.pred_len,)), dynamic_model.BicycleModel.u_min)
+        l = np.block([lx, lu])
+
+        ux = np.ones((dynamic_model.BicycleModel.SDIM * self.pred_len)) * np.inf
+        uu = np.kron(np.ones((self.pred_len,)), dynamic_model.BicycleModel.u_max)
+        u = np.block([ux, uu])
+
+        prob.setup(P, q, A, l, u)
+
+        def UpdateProb():
+            nonlocal prob, self
+            AA, BB, GG = dynamic_model.BicycleModel.MakeDynamicConstrain(self.x_current, self.nominal_traj[1], self.pred_len)
+            Qx = np.eye(4)
+            Qu = np.eye(2)
+            P = BB.transpose() @ np.kron(np.eye(self.pred_len), Qx) @ BB + np.kron(np.eye(self.pred_len), Qu)
+            P = sparse.csc_matrix(P)
+            q = BB.transpose() @ np.kron(np.eye(self.pred_len), Qx) @ (AA @ self.x_current + GG - self.x_ref_current)
+
+            Ax = BB
+            Au = np.eye(self.pred_len + dynamic_model.BicycleModel.SDIM)
+            A = np.block([[Ax], [Au]])
+            A = sparse.csc_matrix(A)
+        
+            lx = np.ones((dynamic_model.BicycleModel.SDIM * self.pred_len,)) * -np.inf
+            lu = np.kron(np.ones((self.pred_len,)), dynamic_model.BicycleModel.u_min)
+            l = np.block([lx, lu])
+
+            ux = np.ones((dynamic_model.BicycleModel.SDIM * self.pred_len)) * np.inf
+            uu = np.kron(np.ones((self.pred_len,)), dynamic_model.BicycleModel.u_max)
+            u = np.block([ux, uu])
+
+            prob.update(P=P, q=q, A=A, l=l, u=u)
+
+        def Step() -> tuple:
+            nonlocal prob, self, UpdateProb
+            for i in range(5):
+                UpdateProb()
+                result = prob.solve()
+                u_opt = np.array(result.x)
+                u_old = self.nominal_traj[1].copy()
+                # update nominal trajectory
+                self.nominal_traj = self.GenNominalTraj(self.x_current, result, self.pred_len)
+
+                u_dif = np.sum(np.abs(u_old-u_opt))
+                if u_dif < 0.1:
+                    break
+
+            # update time, x and ref trajectory
+            self.current_time += 1
+            u_current = result[:dynamic_model.BicycleModel.CDIM]
+            self.x_current = dynamic_model.BicycleModel.step(self.x_current, u_current)
+            self.x_ref_current = self.x_ref_origin[self.current_time+1: self.current_time + self.pred_len + 1]
+            return (self.x_current, u_current)
+
+        return Step
+
+        
+            
+            
+        
 
