@@ -156,7 +156,8 @@ class WatchOneVeh:
     W_ = W/2
 
     pos_tran = lambda x, y, phi : (x+SceneDraw.W_ * np.sin(phi), y-SceneDraw.W_*np.cos(phi))
-    def __init__(self, one_trace: np.ndarray) -> None:
+    def __init__(self, one_trace: np.ndarray, ref_traj: np.ndarray) -> None:
+        self.ref_traj = ref_traj
         self.one_trace = one_trace
         self.traj_len = one_trace.shape[0]
         self.car = patches.Rectangle((0, 0), WatchOneVeh.L, WatchOneVeh.W, fc='None', ec='red')
@@ -167,17 +168,26 @@ class WatchOneVeh:
 
     def DrawVideo(self):
         fig, ax = plt.subplots()
+        circle = patches.Circle((0, 0), 20, ec = 'blue', fc='none')
+        ref_car = patches.Rectangle((0, 0), WatchOneVeh.L, WatchOneVeh.W, fc='None', ec='blue')
+        ax.add_patch(circle)
         ax.add_patch(self.car)
+        ax.add_patch(ref_car)
+        plt.plot(self.ref_traj[:self.traj_len, 0], self.ref_traj[: self.traj_len, 1], color='red')
 
         def update(frame):
             x, y, phi, v = self.one_trace[frame]
             self.car.set_xy(WatchOneVeh.pos_tran(x, y, phi))
             self.car.set_angle(np.rad2deg(phi))
 
+            x, y, phi, v = self.ref_traj[frame]
+            ref_car.set_xy(WatchOneVeh.pos_tran(x, y, phi))
+            ref_car.set_angle(np.rad2deg(phi))
+
             # plt.xlim(self.x_lim_fun((x, y)))
             # plt.ylim(self.y_lim_fun((x, y)))
-            plt.xlim(-50, 50)
-            plt.ylim(-50, 50)
+            plt.xlim(-30, 30)
+            plt.ylim(-30, 30)
 
             ax.set_aspect('equal')
             ax.margins(0)

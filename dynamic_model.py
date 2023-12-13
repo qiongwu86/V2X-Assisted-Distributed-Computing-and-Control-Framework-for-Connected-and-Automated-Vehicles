@@ -100,7 +100,7 @@ class BicycleModel:
         result = np.zeros((4,))
         result[0] = BicycleModel.Td * v * phi * np.sin(phi)
         result[1] = -BicycleModel.Td * v * phi * np.cos(phi)
-        result[2] = -BicycleModel.Td * v * phi / (BicycleModel.L * np.cos(psi) ** 2)
+        result[2] = -BicycleModel.Td * v * psi / (BicycleModel.L * np.cos(psi) ** 2)
         return result
 
     @staticmethod
@@ -142,17 +142,20 @@ class BicycleModel:
         AA = np.zeros((BicycleModel.SDIM * T_nums, BicycleModel.SDIM))
         AA[0*BicycleModel.SDIM: BicycleModel.SDIM] = A_saves[0]
         for i in range(1, T_nums):
-            AA[i*BicycleModel.SDIM: (i+1)*BicycleModel.SDIM] = A_saves[i] @ AA[(i-1)*BicycleModel.SDIM, i*BicycleModel.SDIM]
+            AA[i*BicycleModel.SDIM: (i+1)*BicycleModel.SDIM] = A_saves[i] @ AA[(i-1)*BicycleModel.SDIM: i*BicycleModel.SDIM]
 
         BB = np.zeros((BicycleModel.SDIM * T_nums, BicycleModel.CDIM * T_nums))
         for c in range(T_nums):
             BB[c*BicycleModel.SDIM:(c+1)*BicycleModel.SDIM, c*BicycleModel.CDIM:(c+1)*BicycleModel.CDIM] = B_saves[c]
             for r in range(c+1, T_nums):
-                BB[r*BicycleModel.SDIM, (r+1)*BicycleModel.SDIM, c*BicycleModel.CDIM:(c+1)*BicycleModel.CDIM] = A_saves[r] @ BB[(r-1)*BicycleModel.SDIM, r*BicycleModel.SDIM]
+                BB[r*BicycleModel.SDIM: (r+1)*BicycleModel.SDIM, c*BicycleModel.CDIM:(c+1)*BicycleModel.CDIM] = A_saves[r] @ BB[(r-1)*BicycleModel.SDIM: r*BicycleModel.SDIM, c*BicycleModel.CDIM:(c+1)*BicycleModel.CDIM]
 
         GG = np.zeros((BicycleModel.SDIM * T_nums,))
         GG[: BicycleModel.SDIM] = g_save[0]
         for i in range(1, T_nums):
-            GG[i*BicycleModel.SDIM: (i+1)*BicycleModel.SDIM] = g_save[i] + A_saves[i] @ GG[(i-1)*BicycleModel.SDIM, i*BicycleModel.SDIM]
+            GG[i*BicycleModel.SDIM: (i+1)*BicycleModel.SDIM] = g_save[i] + A_saves[i] @ GG[(i-1)*BicycleModel.SDIM: i*BicycleModel.SDIM]
 
+        np.save('AA.npy', AA)
+        np.save('BB.npy', BB)
+        np.save('GG.npy', GG)
         return (AA, BB, GG)

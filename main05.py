@@ -1,10 +1,10 @@
 from env import EnvParam
-from trace_generate import AddTrace
+from trace_generate import AddTrace, TraceTestForMPC
 import matplotlib.pyplot as plt
 from dynamic_model import OneDimDynamic, init_system
 from utilit import ProcessTrace, PickleSave, PickleRead
 import pickle
-from solver_admm import WeightedADMM, FullADMM
+from solver_admm import WeightedADMM, FullADMM, ILMPC
 
 
 init_system()
@@ -47,7 +47,7 @@ for _ in result:
     print("id: {0}, state {1}".format(_, result[_][:-1]))
 
 # solve
-round = 50
+round = 20
 
 for id in result:
     FullADMM(id, len(result), result[id], X_constrain=False)
@@ -68,4 +68,6 @@ for i in range(round):
         plt.plot([0, len(trace)], [0, 0], color='black')
         fig.savefig('figs/' + "full" +"_test_"+str(i+1)+".jpg")
     
+# 
+
 

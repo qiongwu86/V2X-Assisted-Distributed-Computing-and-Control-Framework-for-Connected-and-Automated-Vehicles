@@ -6,6 +6,7 @@ from scipy import sparse
 import scipy.io
 from env import EnvParam
 from utilit import suppress_stdout_stderr
+import sys
 
 SDIM = dynamic_model.OneDimDynamic.SDIM
 CDIM = dynamic_model.OneDimDynamic.CDIM
@@ -518,12 +519,12 @@ class ILMPC:
         self.pred_len = pred_len
         self.run_times = run_times
         assert self.ref_len >= run_times + pred_len
-        self.nominal_traj = self.GenNominalTraj(x0, 0, self.pred_len)
+        self.nominal_traj = self.GenNominalTraj(x0, None, self.pred_len)
         self.Step = self.InitStep()
 
     def GenNominalTraj(self, x0: np.ndarray, u_bar: np.ndarray, T_nums: int) -> tuple:
-        if u_bar == 0:
-            u_bar = np.zeros((T_nums, CDIM))
+        if u_bar is None:
+            u_bar = np.zeros((T_nums, dynamic_model.BicycleModel.CDIM))
         else:
             assert T_nums == len(u_bar)
         x_bar = dynamic_model.BicycleModel.roll(x0, u_bar, T_nums)[:-1]
@@ -531,72 +532,71 @@ class ILMPC:
         return (x_bar, u_bar)
 
     def InitStep(self):
-        prob = osqp.OSQP()
-        AA, BB, GG = dynamic_model.BicycleModel.MakeDynamicConstrain(self.x_current, self.nominal_traj[1], self.pred_len)
-        Qx = np.eye(4)
-        Qu = np.eye(2)
-        P = BB.transpose() @ np.kron(np.eye(self.pred_len), Qx) @ BB + np.kron(np.eye(self.pred_len), Qu)
-        P = sparse.csc_matrix(P)
-        q = BB.transpose() @ np.kron(np.eye(self.pred_len), Qx) @ (AA @ self.x_current + GG - self.x_ref_current)
-
-        Ax = BB
-        Au = np.eye(self.pred_len + dynamic_model.BicycleModel.SDIM)
-        A = np.block([[Ax], [Au]])
-        A = sparse.csc_matrix(A)
-        
-        lx = np.ones((dynamic_model.BicycleModel.SDIM * self.pred_len,)) * -np.inf
-        lu = np.kron(np.ones((self.pred_len,)), dynamic_model.BicycleModel.u_min)
-        l = np.block([lx, lu])
-
-        ux = np.ones((dynamic_model.BicycleModel.SDIM * self.pred_len)) * np.inf
-        uu = np.kron(np.ones((self.pred_len,)), dynamic_model.BicycleModel.u_max)
-        u = np.block([ux, uu])
-
-        prob.setup(P, q, A, l, u)
-
-        def UpdateProb():
-            nonlocal prob, self
+        over_iter = 0
+        lower_th = 0
+        def UpdateProb() -> osqp.OSQP:
+            nonlocal self
+            prob = osqp.OSQP()
             AA, BB, GG = dynamic_model.BicycleModel.MakeDynamicConstrain(self.x_current, self.nominal_traj[1], self.pred_len)
-            Qx = np.eye(4)
-            Qu = np.eye(2)
-            P = BB.transpose() @ np.kron(np.eye(self.pred_len), Qx) @ BB + np.kron(np.eye(self.pred_len), Qu)
+            Qx = np.diag([0.5, 0.5, 1.0, 0.5])
+            Qx_big = np.kron(np.eye(self.pred_len), Qx)
+            Qx_big[-dynamic_model.BicycleModel.SDIM:, -dynamic_model.BicycleModel.SDIM:] = 5 * Qx
+            Qu = np.eye(2) * 0.3
+            Qu_big = np.kron(np.eye(self.pred_len), Qu)
+            P = BB.transpose() @ Qx_big @ BB + Qu_big
             P = sparse.csc_matrix(P)
-            q = BB.transpose() @ np.kron(np.eye(self.pred_len), Qx) @ (AA @ self.x_current + GG - self.x_ref_current)
+            q = BB.transpose() @ Qx_big @ (AA @ self.x_current + GG - self.x_ref_current.reshape((-1)))
 
-            Ax = BB
-            Au = np.eye(self.pred_len + dynamic_model.BicycleModel.SDIM)
-            A = np.block([[Ax], [Au]])
-            A = sparse.csc_matrix(A)
+            # Ax = BB
+            # Au = np.eye(self.pred_len * dynamic_model.BicycleModel.CDIM)
+            # A = np.block([[Ax                                  , np.zeros((Ax.shape[0], Au.shape[1]))], 
+                        # [np.zeros((Au.shape[0], Ax.shape[1])),                                   Au]])
+            # A = sparse.csc_matrix(A)
         
-            lx = np.ones((dynamic_model.BicycleModel.SDIM * self.pred_len,)) * -np.inf
-            lu = np.kron(np.ones((self.pred_len,)), dynamic_model.BicycleModel.u_min)
-            l = np.block([lx, lu])
+            # lx = np.ones((dynamic_model.BicycleModel.SDIM * self.pred_len,)) * -np.inf
+            # lu = np.kron(np.ones((self.pred_len,)), dynamic_model.BicycleModel.u_min)
+            # l = np.block([lx, lu])
 
-            ux = np.ones((dynamic_model.BicycleModel.SDIM * self.pred_len)) * np.inf
-            uu = np.kron(np.ones((self.pred_len,)), dynamic_model.BicycleModel.u_max)
-            u = np.block([ux, uu])
-
-            prob.update(P=P, q=q, A=A, l=l, u=u)
+            # ux = np.ones((dynamic_model.BicycleModel.SDIM * self.pred_len)) * np.inf
+            # uu = np.kron(np.ones((self.pred_len,)), dynamic_model.BicycleModel.u_max)
+            # u = np.block([ux, uu])
+            
+            A = np.eye(self.pred_len * dynamic_model.BicycleModel.CDIM)
+            A = sparse.csc_matrix(A)
+            l = np.kron(np.ones((self.pred_len,)), dynamic_model.BicycleModel.u_min)
+            u = np.kron(np.ones((self.pred_len,)), dynamic_model.BicycleModel.u_max)
+            
+            prob.setup(P=P, q=q, A=A, l=l, u=u)
+            result = prob.solve()
+            u_opt = np.array(result.x).reshape((self.pred_len, dynamic_model.BicycleModel.CDIM))
+            sys.stdout.flush()
+            return u_opt
 
         def Step() -> tuple:
-            nonlocal prob, self, UpdateProb
-            for i in range(5):
-                UpdateProb()
-                result = prob.solve()
-                u_opt = np.array(result.x)
+            nonlocal self, UpdateProb
+            for i in range(20):
+                with suppress_stdout_stderr():
+                    u_opt = UpdateProb()
                 u_old = self.nominal_traj[1].copy()
                 # update nominal trajectory
-                self.nominal_traj = self.GenNominalTraj(self.x_current, result, self.pred_len)
+                self.nominal_traj = self.GenNominalTraj(self.x_current, u_opt, self.pred_len)
 
                 u_dif = np.sum(np.abs(u_old-u_opt))
-                if u_dif < 0.1:
+                if u_dif < 0.05:
                     break
 
             # update time, x and ref trajectory
             self.current_time += 1
-            u_current = result[:dynamic_model.BicycleModel.CDIM]
+            u_current = u_opt[0]
             self.x_current = dynamic_model.BicycleModel.step(self.x_current, u_current)
             self.x_ref_current = self.x_ref_origin[self.current_time+1: self.current_time + self.pred_len + 1]
+            # update nominal trajectory
+            u_bar = self.nominal_traj[1]
+            u_bar = np.vstack((u_bar[1:, :], u_bar[-1:, :]))
+            x_bar = self.GenNominalTraj(self.x_current, None, self.pred_len)
+            # x_bar = self.GenNominalTraj(self.x_current, u_bar, self.pred_len)
+            # x_bar = np.vstack((x_bar[1:, :], dynamic_model.BicycleModel.step(x_bar[-1], u_bar[-1])))
+            self.nominal_traj = (x_bar, u_bar)
             return (self.x_current, u_current)
 
         return Step

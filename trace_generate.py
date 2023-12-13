@@ -1,7 +1,7 @@
 import numpy as np
 import math
 from numpy.linalg import inv
-from dynamic_model import OneDimDynamic
+from dynamic_model import OneDimDynamic, BicycleModel
 
 SDIM = OneDimDynamic.SDIM
 CDIM = OneDimDynamic.CDIM
@@ -89,4 +89,32 @@ def edge_condition(k: float, T_a: float, t0: float, tf: float, x0: np.ndarray, x
     ## c1-c6
     c = inv_A @ b
     return c
+
+
+def TraceTestForMPC(T_nums: int, map: str='rectangle'):
+    # 
+    ref_trace = np.zeros((T_nums, 4))
+    L = 30
+    W = 10
+    total_lengeh = 2 * (L + W) 
+    u_bar = np.array([3 * np.sin(2*np.pi*np.arange(0, T_nums)/100), np.zeros((T_nums, ))])
+    u_bar = u_bar.transpose()
+    x_bar = BicycleModel.roll(np.array([0, 0, 0, 8]), u_bar, T_nums)[1:]
+    ref_trace[:, 0] = x_bar[:, 0]
+    for i in range(int(T_nums/50)):
+        ref_trace[i*50: (i+1)*50, 1] = 2 * (i % 2)
+    ref_trace[:, 2] = 0
+    ref_trace[:, 3] = 8
+
+    return ref_trace
+    
+def TraceTestForMPC2(T_nums: int):
+    radius = 20
+    velocity = 10
+    step_dist = 10 * 0.1
+    step_angle = step_dist / radius
+    generate_one_point = lambda angle: (radius * np.cos(angle), radius * np.sin(angle), angle + 0.5*np.pi, velocity)
+    all_state = [generate_one_point(i*step_angle + 0.5*np.pi) for i in range(T_nums)]
+    return np.array(all_state)
+    
 
