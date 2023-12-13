@@ -127,7 +127,11 @@ class SceneDraw:
     def GenVideo(self):
         fig, ax = plt.subplots()
         bg = patches.Rectangle((-50, -20), 220, 100, fc='black')
-        ax.add_patch(bg)
+        plt.plot([-200, 200], [2, 2], color='black')
+        plt.plot([-200, -60], [-2, -2], color='black')
+        plt.plot([-200, 400], [-6, -6], color='black')
+        plt.scatter([40], [-4], color='yellow')
+        # ax.add_patch(bg)
         for id in self.car_objs:
             ax.add_patch(self.car_objs[id])
 
@@ -136,8 +140,8 @@ class SceneDraw:
                 x, y, phi, _ = self.car_trajs[id]['X'][frame]
                 self.car_objs[id].set_xy(SceneDraw.pos_tran(x, y, phi))
                 self.car_objs[id].set_angle(np.rad2deg(phi))
-            plt.xlim(-50, 60)
-            plt.ylim(-20, 10)
+            plt.xlim(-100, 50)
+            plt.ylim(-10, 10)
             ax.set_aspect('equal')
             ax.margins(0)
 
@@ -168,11 +172,11 @@ class WatchOneVeh:
 
     def DrawVideo(self):
         fig, ax = plt.subplots()
-        circle = patches.Circle((0, 0), 20, ec = 'blue', fc='none')
+        # circle = patches.Circle((0, 0), 20, ec = 'blue', fc='none')
         ref_car = patches.Rectangle((0, 0), WatchOneVeh.L, WatchOneVeh.W, fc='None', ec='blue')
-        ax.add_patch(circle)
+        # ax.add_patch(circle)
         ax.add_patch(self.car)
-        ax.add_patch(ref_car)
+        # ax.add_patch(ref_car)
         plt.plot(self.ref_traj[:self.traj_len, 0], self.ref_traj[: self.traj_len, 1], color='red')
 
         def update(frame):
@@ -180,14 +184,16 @@ class WatchOneVeh:
             self.car.set_xy(WatchOneVeh.pos_tran(x, y, phi))
             self.car.set_angle(np.rad2deg(phi))
 
-            x, y, phi, v = self.ref_traj[frame]
-            ref_car.set_xy(WatchOneVeh.pos_tran(x, y, phi))
-            ref_car.set_angle(np.rad2deg(phi))
+            # x, y, phi, v = self.ref_traj[frame]
+            # ref_car.set_xy(WatchOneVeh.pos_tran(x, y, phi))
+            # ref_car.set_angle(np.rad2deg(phi))
 
             # plt.xlim(self.x_lim_fun((x, y)))
             # plt.ylim(self.y_lim_fun((x, y)))
-            plt.xlim(-30, 30)
-            plt.ylim(-30, 30)
+            # plt.xlim(0, 150)
+            # plt.ylim(0, 30)
+            plt.xlim(self.x_lim_fun((x, y)))
+            plt.ylim(-2, 5)
 
             ax.set_aspect('equal')
             ax.margins(0)
@@ -197,6 +203,9 @@ class WatchOneVeh:
         anim.save('video/one_veh.mp4', writer=writer)
         plt.close()
 
+        
+
+    
         
     
     

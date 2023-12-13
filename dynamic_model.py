@@ -60,8 +60,8 @@ class BicycleModel:
     L = 4.5
     SDIM = 4
     CDIM = 2
-    a_max = 2.0
-    a_min = -2.0
+    a_max = 5.0
+    a_min = -5.0
     psi_max = 15 * np.pi / 180
     psi_min = -15 * np.pi / 180
     u_max = np.array([a_max, psi_max])

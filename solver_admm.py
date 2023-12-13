@@ -329,7 +329,7 @@ class FullADMM:
     
     rho = 0.1
 
-    Q_x: np.ndarray = np.diag([5.0, 0.1, 0.1])
+    Q_x: np.ndarray = np.diag([5.5, 0.1, 0.1])
     Q_u: np.ndarray = np.diag([0.1])
     Q_xu: np.ndarray = np.block([[                                   Q_x, np.zeros((Q_x.shape[0], Q_u.shape[1]))],
                                  [np.zeros((Q_u.shape[1], Q_x.shape[0])),                                    Q_u]])
@@ -504,6 +504,23 @@ class FullADMM:
 
         return SolveX
         
+    def CollectTraces() -> dict[int: tuple[str, np.ndarray]]:
+        '''
+        return:
+            {id: (
+                lane, trace
+            )}
+        '''
+        assert len(FullADMM.all_solver) != 0
+        all_trace = {}
+        for id in FullADMM.all_solver:
+            solver = FullADMM.all_solver[id]
+            trace = solver.x.reshape((-1, 4))[:, 0: 3]
+            lane = solver.lane
+            id = solver.id
+            all_trace[id] = (lane, trace)
+        return all_trace
+        
 
 class ILMPC:
 
@@ -593,10 +610,7 @@ class ILMPC:
             # update nominal trajectory
             u_bar = self.nominal_traj[1]
             u_bar = np.vstack((u_bar[1:, :], u_bar[-1:, :]))
-            x_bar = self.GenNominalTraj(self.x_current, None, self.pred_len)
-            # x_bar = self.GenNominalTraj(self.x_current, u_bar, self.pred_len)
-            # x_bar = np.vstack((x_bar[1:, :], dynamic_model.BicycleModel.step(x_bar[-1], u_bar[-1])))
-            self.nominal_traj = (x_bar, u_bar)
+            self.nominal_traj = self.GenNominalTraj(self.x_current, u_bar, self.pred_len)
             return (self.x_current, u_current)
 
         return Step

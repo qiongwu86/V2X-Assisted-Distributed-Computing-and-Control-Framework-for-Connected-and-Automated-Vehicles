@@ -117,4 +117,33 @@ def TraceTestForMPC2(T_nums: int):
     all_state = [generate_one_point(i*step_angle + 0.5*np.pi) for i in range(T_nums)]
     return np.array(all_state)
     
+def TraceTestForMPC3():
+    radius = 20
+    L = 10
+    H = 2
+    angle = np.arctanh(H / L)
+    velocity = 10
+    l = 0
+    trace = np.zeros((200, 4))
+    trace[:, 0] = np.linspace(0, 200, 200)
+    trace[50: 60, 1] = np.tan(angle) * (trace[50: 60, 0] - trace[50, 0])
+    trace[50: 60, 2] = angle
+    trace[:, 3] = velocity
+    return trace
+
+def TraceTestForMPC3():
+    radius = 20
+    L = 10
+    H = 2
+    angle = np.arctanh(H / L)
+    velocity = 10
+    l = 0
+    trace = np.zeros((200, 4))
+    trace[:, 0] = np.linspace(0, 200, 200)
+    trace[50: 80, 1] = 2
+    trace[80: 100, 1] = 1
+    trace[:, 3] = velocity
+    return trace
+
+
 
