@@ -155,7 +155,7 @@ class BicycleModel:
         for i in range(1, T_nums):
             GG[i*BicycleModel.SDIM: (i+1)*BicycleModel.SDIM] = g_save[i] + A_saves[i] @ GG[(i-1)*BicycleModel.SDIM: i*BicycleModel.SDIM]
 
-        np.save('AA.npy', AA)
-        np.save('BB.npy', BB)
-        np.save('GG.npy', GG)
+        # np.save('AA.npy', AA)
+        # np.save('BB.npy', BB)
+        # np.save('GG.npy', GG)
         return (AA, BB, GG)

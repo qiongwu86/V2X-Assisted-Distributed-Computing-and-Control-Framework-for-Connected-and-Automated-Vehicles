@@ -5,6 +5,7 @@ import pickle
 from env import EnvParam
 from matplotlib import pyplot as plt
 from matplotlib import animation, rc, patches
+import casadi
 
 
 def ProcessTrace(state_dict: dict):
@@ -140,7 +141,7 @@ class SceneDraw:
                 x, y, phi, _ = self.car_trajs[id]['X'][frame]
                 self.car_objs[id].set_xy(SceneDraw.pos_tran(x, y, phi))
                 self.car_objs[id].set_angle(np.rad2deg(phi))
-            plt.xlim(-100, 50)
+            plt.xlim(-150, 50)
             plt.ylim(-10, 10)
             ax.set_aspect('equal')
             ax.margins(0)
@@ -149,6 +150,21 @@ class SceneDraw:
         writer = animation.FFMpegWriter(fps=10)
         anim.save('video/animation.mp4', writer=writer)
         plt.close()
+
+        fig = plt.figure()
+        for id in self.car_trajs:
+            trace = self.car_trajs[id]['X']
+            phis = trace[:, 2]
+            # v = trace[:, 3]
+            plt.plot(phis)
+        fig.savefig('figs/phis.jpg')
+
+        fig = plt.figure()
+        for id in self.car_trajs:
+            trace = self.car_trajs[id]['X']
+            v = trace[:, 3]
+            plt.plot(v)
+        fig.savefig('figs/v.jpg')
         
     
 class WatchOneVeh:
@@ -204,8 +220,34 @@ class WatchOneVeh:
         plt.close()
 
         
+def JKCalculator(T_nums: int):
+    x_ego = casadi.SX.sym('x_ego', 4 * T_nums)
+    x_other = casadi.SX.sym('x_other', 4 * T_nums)
 
-    
-        
-    
-    
+    dist = casadi.SX.sym('dist', 4 * T_nums)
+    for i in range(T_nums):
+        dist[0 + i * 4] = (x_ego[0 + i * 4] - x_other[0 + i * 4] + casadi.cos(x_ego[2 + i * 4]) - casadi.cos(x_other[2 + i * 4]) ) ** 2 \
+                        + (x_ego[1 + i * 4] - x_other[1 + i * 4] + casadi.sin(x_ego[2 + i * 4]) - casadi.sin(x_other[2 + i * 4]) ) ** 2
+
+        dist[1 + i * 4] = (x_ego[0 + i * 4] - x_other[0 + i * 4] + casadi.cos(x_ego[2 + i * 4]) + casadi.cos(x_other[2 + i * 4]) ) ** 2 \
+                        + (x_ego[1 + i * 4] - x_other[1 + i * 4] + casadi.sin(x_ego[2 + i * 4]) + casadi.sin(x_other[2 + i * 4]) ) ** 2
+
+        dist[2 + i * 4] = (x_ego[0 + i * 4] - x_other[0 + i * 4] - casadi.cos(x_ego[2 + i * 4]) - casadi.cos(x_other[2 + i * 4]) ) ** 2 \
+                        + (x_ego[1 + i * 4] - x_other[1 + i * 4] - casadi.sin(x_ego[2 + i * 4]) - casadi.sin(x_other[2 + i * 4]) ) ** 2
+
+        dist[3 + i * 4] = (x_ego[0 + i * 4] - x_other[0 + i * 4] - casadi.cos(x_ego[2 + i * 4]) + casadi.cos(x_other[2 + i * 4]) ) ** 2 \
+                        + (x_ego[1 + i * 4] - x_other[1 + i * 4] - casadi.sin(x_ego[2 + i * 4]) + casadi.sin(x_other[2 + i * 4]) ) ** 2
+
+    dist_over = casadi.fmax(dist, casadi.SX.zeros(4 * T_nums))
+    J = casadi.jacobian(dist_over, x_ego)
+    F_J = casadi.Function('F_J', [x_ego, x_other], [J])
+    F_K = casadi.Function('F_K', [x_ego, x_other], [dist_over - J @ x_ego])
+
+    def Calculator(X_ebar: np.ndarray, X_obar: np.ndarray ) -> tuple:
+        nonlocal T_nums
+        assert T_nums == X_ebar.shape[0] == X_obar.shape[0]
+        return (
+            np.array(F_J(X_ebar.reshape(-1), X_obar.reshape(-1))), 
+            np.array(F_K(X_ebar.reshape(-1), X_obar.reshape(-1)))
+        )
+    return Calculator

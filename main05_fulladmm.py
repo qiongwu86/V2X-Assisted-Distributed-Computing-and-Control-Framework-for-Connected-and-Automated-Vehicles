@@ -13,8 +13,8 @@ init_system()
 
 # 
 result = EnvParam.generate_init_state()
-PickleSave(result, 'init_state.pkl')
-# result = PickleRead('init_state.pkl')
+PickleSave(result, 'init_state/init_state.pkl')
+# result = PickleRead('init_state/init_state.pkl')
 for _ in result:
     print("id: {0}, state {1}".format(_, result[_]))
 

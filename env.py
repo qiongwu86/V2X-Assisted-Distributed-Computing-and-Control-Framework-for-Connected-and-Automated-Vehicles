@@ -125,8 +125,12 @@ class EnvParam:
                 # find x >= 0 and x > 40
                 ind_ACC_LANE1 = np.nonzero(ref_trace[:, 0] >= 0)[0][0]
                 ind_ACC_LANE2 = np.nonzero(ref_trace[:, 0] >= EnvParam.ACC_LANE2)[0][0]
-                change_ind = int(0.5 * (ind_ACC_LANE1 + ind_ACC_LANE2))
-                ref_trace[change_ind:, 1] = 0
+                # change_ind = int(0.5 * (ind_ACC_LANE1 + ind_ACC_LANE2))
+                # ref_trace[change_ind:, 1] = 0
+                delta_y = 4 / (ind_ACC_LANE2 - ind_ACC_LANE1)
+                for i in range(0, ind_ACC_LANE2 - ind_ACC_LANE1):
+                    ref_trace[i+ind_ACC_LANE1, 1] = -4 + i * delta_y
+                ref_trace[ind_ACC_LANE2:, 1] = 0
 
             result[id] = ref_trace
 
