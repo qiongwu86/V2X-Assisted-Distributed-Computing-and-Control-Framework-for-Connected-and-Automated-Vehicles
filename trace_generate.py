@@ -145,5 +145,20 @@ def TraceTestForMPC3():
     trace[:, 3] = velocity
     return trace
 
+def TraceTestForMPC4() -> dict[int, np.ndarray]:
+    result = {}
+    # veh 1
+    result[1] = np.zeros((200, 4))
+    result[1][:, 0] = np.arange(0, 200)
+    result[1][:, 1] = 0.1
+    result[1][:, 2] = 0
+    result[1][:, 3] = 10
+    # veh 2
+    result[2] = np.zeros((200, 4))
+    result[2][:, 0] = np.arange(200, 0, -1)
+    result[2][:, 1] = -0.1
+    result[2][:, 2] = np.pi
+    result[2][:, 3] = 10
+    return result
 
 

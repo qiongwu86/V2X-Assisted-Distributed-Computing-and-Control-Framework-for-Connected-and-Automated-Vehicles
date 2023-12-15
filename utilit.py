@@ -224,22 +224,24 @@ def JKCalculator(T_nums: int):
     x_ego = casadi.SX.sym('x_ego', 4 * T_nums)
     x_other = casadi.SX.sym('x_other', 4 * T_nums)
 
-    K = 1.1
-    W = 1.5
+    W = 4
+    h = 2
+    h_1_2 = h * 0.5
+    h_3_2 = h * 1.5
 
     dist = casadi.SX.sym('dist', 4 * T_nums)
     for i in range(T_nums):
-        dist[0 + i * 4] = (x_ego[0 + i * 4] - x_other[0 + i * 4] + K*casadi.cos(x_ego[2 + i * 4]) - K*casadi.cos(x_other[2 + i * 4]) ) ** 2 \
-                        + (x_ego[1 + i * 4] - x_other[1 + i * 4] + K*casadi.sin(x_ego[2 + i * 4]) - K*casadi.sin(x_other[2 + i * 4]) ) ** 2 - W
+        dist[0 + i * 4] = (x_ego[0 + i * 4] - x_other[0 + i * 4] + h_1_2*casadi.cos(x_ego[2 + i * 4]) - h_1_2*casadi.cos(x_other[2 + i * 4]) ) ** 2 \
+                        + (x_ego[1 + i * 4] - x_other[1 + i * 4] + h_1_2*casadi.sin(x_ego[2 + i * 4]) - h_1_2*casadi.sin(x_other[2 + i * 4]) ) ** 2 - W
 
-        dist[1 + i * 4] = (x_ego[0 + i * 4] - x_other[0 + i * 4] + K*casadi.cos(x_ego[2 + i * 4]) + K*casadi.cos(x_other[2 + i * 4]) ) ** 2 \
-                        + (x_ego[1 + i * 4] - x_other[1 + i * 4] + K*casadi.sin(x_ego[2 + i * 4]) + K*casadi.sin(x_other[2 + i * 4]) ) ** 2 - W
+        dist[1 + i * 4] = (x_ego[0 + i * 4] - x_other[0 + i * 4] + h_1_2*casadi.cos(x_ego[2 + i * 4]) - h_3_2*casadi.cos(x_other[2 + i * 4]) ) ** 2 \
+                        + (x_ego[1 + i * 4] - x_other[1 + i * 4] + h_1_2*casadi.sin(x_ego[2 + i * 4]) - h_3_2*casadi.sin(x_other[2 + i * 4]) ) ** 2 - W
 
-        dist[2 + i * 4] = (x_ego[0 + i * 4] - x_other[0 + i * 4] - K*casadi.cos(x_ego[2 + i * 4]) - K*casadi.cos(x_other[2 + i * 4]) ) ** 2 \
-                        + (x_ego[1 + i * 4] - x_other[1 + i * 4] - K*casadi.sin(x_ego[2 + i * 4]) - K*casadi.sin(x_other[2 + i * 4]) ) ** 2 - W
+        dist[2 + i * 4] = (x_ego[0 + i * 4] - x_other[0 + i * 4] + h_3_2*casadi.cos(x_ego[2 + i * 4]) - h_1_2*casadi.cos(x_other[2 + i * 4]) ) ** 2 \
+                        + (x_ego[1 + i * 4] - x_other[1 + i * 4] + h_3_2*casadi.sin(x_ego[2 + i * 4]) - h_1_2*casadi.sin(x_other[2 + i * 4]) ) ** 2 - W
 
-        dist[3 + i * 4] = (x_ego[0 + i * 4] - x_other[0 + i * 4] - K*casadi.cos(x_ego[2 + i * 4]) + K*casadi.cos(x_other[2 + i * 4]) ) ** 2 \
-                        + (x_ego[1 + i * 4] - x_other[1 + i * 4] - K*casadi.sin(x_ego[2 + i * 4]) + K*casadi.sin(x_other[2 + i * 4]) ) ** 2 - W
+        dist[3 + i * 4] = (x_ego[0 + i * 4] - x_other[0 + i * 4] + h_3_2*casadi.cos(x_ego[2 + i * 4]) - h_3_2*casadi.cos(x_other[2 + i * 4]) ) ** 2 \
+                        + (x_ego[1 + i * 4] - x_other[1 + i * 4] + h_3_2*casadi.sin(x_ego[2 + i * 4]) - h_3_2*casadi.sin(x_other[2 + i * 4]) ) ** 2 - W
 
     dist_over = casadi.fmin(dist, casadi.SX.zeros(4 * T_nums))
     J = casadi.jacobian(dist_over, x_ego)

@@ -526,20 +526,24 @@ class ILMPC:
 
     CDIM = dynamic_model.BicycleModel.CDIM
     SDIM = dynamic_model.BicycleModel.SDIM
-    calor, dist = JKCalculator(30)
+    Safe_factor = 10
+    pred_len = 40
+    sensing_dist = 30
+    iter_times = 10
+    calor, dist = JKCalculator(pred_len)
     all_solver = {}
     
-    def __init__(self, solver_id: int, x0: np.ndarray, run_times: int, x_ref: np.ndarray, pred_len: int = 30) -> None:
+    def __init__(self, solver_id: int, x0: np.ndarray, run_times: int, x_ref: np.ndarray) -> None:
         self.solver_id = solver_id
         ILMPC.all_solver[solver_id] = self
         self.current_time = 0
         self.x_current = x0
         self.x_ref_origin = x_ref
-        self.x_ref_current = self.x_ref_origin[self.current_time+1: self.current_time + pred_len + 1]
+        self.pred_len = ILMPC.pred_len
+        self.x_ref_current = self.x_ref_origin[self.current_time+1: self.current_time + self.pred_len + 1]
         self.ref_len = x_ref.shape[0]
-        self.pred_len = pred_len
         self.run_times = run_times
-        assert self.ref_len >= run_times + pred_len
+        assert self.ref_len >= run_times + self.pred_len
         self.nominal_traj = self.GenNominalTraj(x0, None, self.pred_len) # (x_bar, u_bar, x_safe_bar)
         self.Step = self.InitStep()
         self.other_x_bar_for_safe = []
@@ -571,15 +575,16 @@ class ILMPC:
             Safe_mat = np.zeros((self.pred_len * dynamic_model.BicycleModel.CDIM, self.pred_len * dynamic_model.BicycleModel.CDIM))
             Safe_vec = np.zeros((self.pred_len * dynamic_model.BicycleModel.CDIM))
             for x_bar_other in self.other_x_bar_for_safe:
-                # d = ILMPC.dist(self.nominal_traj[2], x_bar_other)
+                d = ILMPC.dist(self.nominal_traj[2], x_bar_other)
+                print(sum(d))
                 J, K = ILMPC.calor(self.nominal_traj[2], x_bar_other)
                 JB = J @ BB
                 Safe_mat += JB.transpose() @ JB
                 Safe_vec += JB.transpose() @ (J @ AA @ self.x_current + J @ GG + K)
             
-            P = BB.transpose() @ Qx_big @ BB + Qu_big + Safe_mat
+            P = BB.transpose() @ Qx_big @ BB + Qu_big + ILMPC.Safe_factor * Safe_mat
             P = sparse.csc_matrix(P)
-            q = BB.transpose() @ Qx_big @ (AA @ self.x_current + GG - self.x_ref_current.reshape((-1))) + Safe_vec
+            q = BB.transpose() @ Qx_big @ (AA @ self.x_current + GG - self.x_ref_current.reshape((-1))) + ILMPC.Safe_factor * Safe_vec
 
             # Ax = BB
             # Au = np.eye(self.pred_len * dynamic_model.BicycleModel.CDIM)
@@ -608,7 +613,7 @@ class ILMPC:
 
         def Step() -> tuple:
             nonlocal self, UpdateProb
-            for i in range(5):
+            for i in range(ILMPC.iter_times):
                 with suppress_stdout_stderr():
                     u_opt = UpdateProb()
                 u_old = self.nominal_traj[1].copy()
@@ -644,6 +649,6 @@ class ILMPC:
                     continue
 
                 dist = np.linalg.norm(solver_ego.x_current - solver_other.x_current)
-                if dist <= 15:
+                if dist <= ILMPC.sensing_dist:
                     solver_ego.other_x_bar_for_safe.append(solver_other.nominal_traj[2])
         return

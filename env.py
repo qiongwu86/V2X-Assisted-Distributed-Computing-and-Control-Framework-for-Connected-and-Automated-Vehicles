@@ -13,7 +13,7 @@ class EnvParam:
     InitPosRandRange: np.ndarray = np.array([-3, 3])
 
     InitVelocity: float = 15.0
-    InitVelocityRandRange: np.ndarray = np.array([-6, 6])
+    InitVelocityRandRange: np.ndarray = np.array([-2, 2])
     InitDensity: float = 0.08
     InitDensityRandRange: np.ndarray = np.array([-0.05, 0.05])
 
