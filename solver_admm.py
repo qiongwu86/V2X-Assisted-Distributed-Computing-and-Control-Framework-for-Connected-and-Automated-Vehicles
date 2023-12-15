@@ -5,7 +5,7 @@ import osqp
 from scipy import sparse
 import scipy.io
 from env import EnvParam
-from utilit import suppress_stdout_stderr
+from utilit import suppress_stdout_stderr, JKCalculator
 import sys
 
 SDIM = dynamic_model.OneDimDynamic.SDIM
@@ -526,8 +526,12 @@ class ILMPC:
 
     CDIM = dynamic_model.BicycleModel.CDIM
     SDIM = dynamic_model.BicycleModel.SDIM
+    calor, dist = JKCalculator(30)
+    all_solver = {}
     
-    def __init__(self, x0: np.ndarray, run_times: int, x_ref: np.ndarray, pred_len: int = 30) -> None:
+    def __init__(self, solver_id: int, x0: np.ndarray, run_times: int, x_ref: np.ndarray, pred_len: int = 30) -> None:
+        self.solver_id = solver_id
+        ILMPC.all_solver[solver_id] = self
         self.current_time = 0
         self.x_current = x0
         self.x_ref_origin = x_ref
@@ -536,17 +540,20 @@ class ILMPC:
         self.pred_len = pred_len
         self.run_times = run_times
         assert self.ref_len >= run_times + pred_len
-        self.nominal_traj = self.GenNominalTraj(x0, None, self.pred_len)
+        self.nominal_traj = self.GenNominalTraj(x0, None, self.pred_len) # (x_bar, u_bar, x_safe_bar)
         self.Step = self.InitStep()
+        self.other_x_bar_for_safe = []
 
     def GenNominalTraj(self, x0: np.ndarray, u_bar: np.ndarray, T_nums: int) -> tuple:
         if u_bar is None:
             u_bar = np.zeros((T_nums, dynamic_model.BicycleModel.CDIM))
         else:
             assert T_nums == len(u_bar)
-        x_bar = dynamic_model.BicycleModel.roll(x0, u_bar, T_nums)[:-1]
+        x_bar_all = dynamic_model.BicycleModel.roll(x0, u_bar, T_nums)
+        x_bar = x_bar_all[:-1]
+        x_bar_safe = x_bar_all[1:]
         assert x_bar.shape[0] == u_bar.shape[0] == T_nums
-        return (x_bar, u_bar)
+        return (x_bar, u_bar, x_bar_safe)
 
     def InitStep(self):
         over_iter = 0
@@ -560,9 +567,19 @@ class ILMPC:
             Qx_big[-dynamic_model.BicycleModel.SDIM:, -dynamic_model.BicycleModel.SDIM:] = 5 * Qx
             Qu = np.eye(2) * 0.3
             Qu_big = np.kron(np.eye(self.pred_len), Qu)
-            P = BB.transpose() @ Qx_big @ BB + Qu_big
+
+            Safe_mat = np.zeros((self.pred_len * dynamic_model.BicycleModel.CDIM, self.pred_len * dynamic_model.BicycleModel.CDIM))
+            Safe_vec = np.zeros((self.pred_len * dynamic_model.BicycleModel.CDIM))
+            for x_bar_other in self.other_x_bar_for_safe:
+                # d = ILMPC.dist(self.nominal_traj[2], x_bar_other)
+                J, K = ILMPC.calor(self.nominal_traj[2], x_bar_other)
+                JB = J @ BB
+                Safe_mat += JB.transpose() @ JB
+                Safe_vec += JB.transpose() @ (J @ AA @ self.x_current + J @ GG + K)
+            
+            P = BB.transpose() @ Qx_big @ BB + Qu_big + Safe_mat
             P = sparse.csc_matrix(P)
-            q = BB.transpose() @ Qx_big @ (AA @ self.x_current + GG - self.x_ref_current.reshape((-1)))
+            q = BB.transpose() @ Qx_big @ (AA @ self.x_current + GG - self.x_ref_current.reshape((-1))) + Safe_vec
 
             # Ax = BB
             # Au = np.eye(self.pred_len * dynamic_model.BicycleModel.CDIM)
@@ -591,7 +608,7 @@ class ILMPC:
 
         def Step() -> tuple:
             nonlocal self, UpdateProb
-            for i in range(20):
+            for i in range(5):
                 with suppress_stdout_stderr():
                     u_opt = UpdateProb()
                 u_old = self.nominal_traj[1].copy()
@@ -615,8 +632,18 @@ class ILMPC:
 
         return Step
 
-        
-            
-            
-        
+    @staticmethod
+    def UpdateNominalOther():
+        for solver_ego_id in ILMPC.all_solver:
+            solver_ego = ILMPC.all_solver[solver_ego_id]
+            solver_ego.other_x_bar_for_safe = []
 
+            for solver_other_id in ILMPC.all_solver:
+                solver_other = ILMPC.all_solver[solver_other_id]
+                if solver_ego_id == solver_other_id:
+                    continue
+
+                dist = np.linalg.norm(solver_ego.x_current - solver_other.x_current)
+                if dist <= 15:
+                    solver_ego.other_x_bar_for_safe.append(solver_other.nominal_traj[2])
+        return

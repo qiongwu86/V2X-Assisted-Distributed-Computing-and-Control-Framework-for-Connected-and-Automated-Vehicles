@@ -169,8 +169,8 @@ class SceneDraw:
     
 class WatchOneVeh:
 
-    L = 4.5
-    W = 2.0
+    L = 4
+    W = 1.8
 
     L_ = L/2
     W_ = W/2
@@ -224,30 +224,38 @@ def JKCalculator(T_nums: int):
     x_ego = casadi.SX.sym('x_ego', 4 * T_nums)
     x_other = casadi.SX.sym('x_other', 4 * T_nums)
 
+    K = 1.1
+    W = 1.5
+
     dist = casadi.SX.sym('dist', 4 * T_nums)
     for i in range(T_nums):
-        dist[0 + i * 4] = (x_ego[0 + i * 4] - x_other[0 + i * 4] + casadi.cos(x_ego[2 + i * 4]) - casadi.cos(x_other[2 + i * 4]) ) ** 2 \
-                        + (x_ego[1 + i * 4] - x_other[1 + i * 4] + casadi.sin(x_ego[2 + i * 4]) - casadi.sin(x_other[2 + i * 4]) ) ** 2
+        dist[0 + i * 4] = (x_ego[0 + i * 4] - x_other[0 + i * 4] + K*casadi.cos(x_ego[2 + i * 4]) - K*casadi.cos(x_other[2 + i * 4]) ) ** 2 \
+                        + (x_ego[1 + i * 4] - x_other[1 + i * 4] + K*casadi.sin(x_ego[2 + i * 4]) - K*casadi.sin(x_other[2 + i * 4]) ) ** 2 - W
 
-        dist[1 + i * 4] = (x_ego[0 + i * 4] - x_other[0 + i * 4] + casadi.cos(x_ego[2 + i * 4]) + casadi.cos(x_other[2 + i * 4]) ) ** 2 \
-                        + (x_ego[1 + i * 4] - x_other[1 + i * 4] + casadi.sin(x_ego[2 + i * 4]) + casadi.sin(x_other[2 + i * 4]) ) ** 2
+        dist[1 + i * 4] = (x_ego[0 + i * 4] - x_other[0 + i * 4] + K*casadi.cos(x_ego[2 + i * 4]) + K*casadi.cos(x_other[2 + i * 4]) ) ** 2 \
+                        + (x_ego[1 + i * 4] - x_other[1 + i * 4] + K*casadi.sin(x_ego[2 + i * 4]) + K*casadi.sin(x_other[2 + i * 4]) ) ** 2 - W
 
-        dist[2 + i * 4] = (x_ego[0 + i * 4] - x_other[0 + i * 4] - casadi.cos(x_ego[2 + i * 4]) - casadi.cos(x_other[2 + i * 4]) ) ** 2 \
-                        + (x_ego[1 + i * 4] - x_other[1 + i * 4] - casadi.sin(x_ego[2 + i * 4]) - casadi.sin(x_other[2 + i * 4]) ) ** 2
+        dist[2 + i * 4] = (x_ego[0 + i * 4] - x_other[0 + i * 4] - K*casadi.cos(x_ego[2 + i * 4]) - K*casadi.cos(x_other[2 + i * 4]) ) ** 2 \
+                        + (x_ego[1 + i * 4] - x_other[1 + i * 4] - K*casadi.sin(x_ego[2 + i * 4]) - K*casadi.sin(x_other[2 + i * 4]) ) ** 2 - W
 
-        dist[3 + i * 4] = (x_ego[0 + i * 4] - x_other[0 + i * 4] - casadi.cos(x_ego[2 + i * 4]) + casadi.cos(x_other[2 + i * 4]) ) ** 2 \
-                        + (x_ego[1 + i * 4] - x_other[1 + i * 4] - casadi.sin(x_ego[2 + i * 4]) + casadi.sin(x_other[2 + i * 4]) ) ** 2
+        dist[3 + i * 4] = (x_ego[0 + i * 4] - x_other[0 + i * 4] - K*casadi.cos(x_ego[2 + i * 4]) + K*casadi.cos(x_other[2 + i * 4]) ) ** 2 \
+                        + (x_ego[1 + i * 4] - x_other[1 + i * 4] - K*casadi.sin(x_ego[2 + i * 4]) + K*casadi.sin(x_other[2 + i * 4]) ) ** 2 - W
 
-    dist_over = casadi.fmax(dist, casadi.SX.zeros(4 * T_nums))
+    dist_over = casadi.fmin(dist, casadi.SX.zeros(4 * T_nums))
     J = casadi.jacobian(dist_over, x_ego)
     F_J = casadi.Function('F_J', [x_ego, x_other], [J])
     F_K = casadi.Function('F_K', [x_ego, x_other], [dist_over - J @ x_ego])
+    F_d = casadi.Function('F_d', [x_ego, x_other], [dist_over])
 
     def Calculator(X_ebar: np.ndarray, X_obar: np.ndarray ) -> tuple:
         nonlocal T_nums
         assert T_nums == X_ebar.shape[0] == X_obar.shape[0]
         return (
             np.array(F_J(X_ebar.reshape(-1), X_obar.reshape(-1))), 
-            np.array(F_K(X_ebar.reshape(-1), X_obar.reshape(-1)))
+            np.array(F_K(X_ebar.reshape(-1), X_obar.reshape(-1))).reshape((-1,))
         )
-    return Calculator
+
+    def DistCalor(X_ebar: np.ndarray, X_obar: np.ndarray ) -> np.ndarray:
+        return np.array(F_d(X_ebar.reshape(-1), X_obar.reshape(-1)))
+        
+    return Calculator, DistCalor

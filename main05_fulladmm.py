@@ -105,17 +105,20 @@ traj_len = run_len
 all_trace_for_draw = {}
 for id in managed_trace:
     trace = managed_trace[id]
-    mpc_solver = ILMPC(trace[0], run_len, trace)
+    mpc_solver = ILMPC(id, trace[0], run_len, trace)
 
-    act_trace = np.zeros((run_len, 4))
-    act_control = np.zeros((run_len, 2))
-    for t in tqdm(range(run_len)):
-        x_current, _ = mpc_solver.Step()
-        act_trace[t] = x_current
-        act_control[t] = _
-    all_trace_for_draw[id] = {'X': act_trace,
-                              'U': act_control,
-                              'lane': 'main'}
+    all_trace_for_draw[id] = {
+        'X' : np.zeros((run_len, 4)), 
+        'U' : np.zeros((run_len, 2)),
+        'lane' : 'main'
+    }
+
+for t in tqdm(range(run_len)):
+    ILMPC.UpdateNominalOther()
+    for id in ILMPC.all_solver:
+        x_current, _ = ILMPC.all_solver[id].Step()
+        all_trace_for_draw[id]['X'][t] = x_current
+        all_trace_for_draw[id]['U'][t] = _
 
 Drawer = SceneDraw(len(all_trace_for_draw), traj_len, all_trace_for_draw)
 Drawer.GenVideo()

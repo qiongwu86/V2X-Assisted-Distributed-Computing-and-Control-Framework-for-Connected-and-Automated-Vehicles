@@ -57,7 +57,8 @@ class OneDimDynamic:
 
 class BicycleModel:
     Td = 0.1
-    L = 4.5
+    L = 4
+    W = 1.8
     SDIM = 4
     CDIM = 2
     a_max = 5.0

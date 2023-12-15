@@ -123,7 +123,8 @@ class EnvParam:
             if lane == 'merge':
                 ref_trace[:, 1] = -4
                 # find x >= 0 and x > 40
-                ind_ACC_LANE1 = np.nonzero(ref_trace[:, 0] >= 0)[0][0]
+                # ind_ACC_LANE1 = np.nonzero(ref_trace[:, 0] >= 0)[0][0]
+                ind_ACC_LANE1 = np.nonzero(ref_trace[:, 0] >= -EnvParam.ACC_LANE1)[0][0]
                 ind_ACC_LANE2 = np.nonzero(ref_trace[:, 0] >= EnvParam.ACC_LANE2)[0][0]
                 # change_ind = int(0.5 * (ind_ACC_LANE1 + ind_ACC_LANE2))
                 # ref_trace[change_ind:, 1] = 0
