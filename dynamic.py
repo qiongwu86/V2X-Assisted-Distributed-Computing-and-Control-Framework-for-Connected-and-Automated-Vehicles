@@ -62,7 +62,7 @@ class KinematicModel:
         # steer_min=-np.inf,
         # steer_max=np.inf,
         delta_T=0.1,
-        pred_len=40,
+        pred_len=30,
         safe_th=2.0
     )
 
