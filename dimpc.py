@@ -4,20 +4,17 @@ import osqp
 from dynamic import KinematicModel
 from scipy import sparse
 from utilit import suppress_stdout_stderr
-import matplotlib.pyplot as plt
-import typing
 from typing import Dict
-import threading
 
 
 class DistributedMPC:
     default_config = dict(
         Qx=0.1 * np.diag((1.0, 1.0, 0, 0)),
-        Qu=0.05 * np.eye(2),
-        safe_factor=2.0,
+        Qu=0.07 * np.eye(2),
+        safe_factor=10.0,
         init_iter=10,
         run_iter=5,
-        sensing_distance=10.0,
+        sensing_distance=25.0,
         priority=False
     )
 
@@ -224,142 +221,6 @@ class DistributedMPC:
 
 
 _all_mpc: Dict[int, DistributedMPC] = {}
-road_width = 8
-r = (3 / 4) * road_width
-init_length = 10
-over_length = 30
-speed = 3  # m / 100ms
-speed_ms = speed / 10
-
-
-def _gen_trace_01():
-
-    # part 1
-    y = np.arange(-0.5 * road_width - init_length, -0.5 * road_width, speed_ms)
-    x = -(1 / 4) * road_width * np.ones((len(y),))
-    phi = np.pi * 0.5 * np.ones(len(y), )
-    v = speed * np.ones(len(y), )
-    traj_part1 = np.vstack((x, y, phi, v)).transpose()
-
-    # part 2
-    beta = speed_ms / r
-    rads = np.arange(0, np.pi * 0.5, beta)
-    x = 0.5 * road_width - np.cos(rads) * r
-    y = -0.5 * road_width + np.sin(rads) * r
-    phi = rads + 0.5 * np.pi
-    v = speed * np.ones(len(rads), )
-    traj_part2 = np.vstack((x, y, phi, v)).transpose()
-
-    # part 3
-    x = np.arange(0.5 * road_width, 0.5 * road_width + over_length, speed_ms)
-    y = 0.0 * (1 / 4) * road_width * np.ones((len(x),))
-    phi = 0.0 * np.ones(len(y), )
-    v = speed * np.ones(len(x), )
-    traj_part3 = np.vstack((x, y, phi, v)).transpose()
-
-    traj1 = np.concatenate((traj_part1, traj_part2, traj_part3))
-
-    # traj_fun = lambda _x, _y, _phi, _v: (-_x, _y, _phi, _v)
-    traj_fun = lambda _x, _y, _phi, _v: (_y, -_x, _phi-0.5*np.pi, _v)
-    traj2 = [traj_fun(_s[0], _s[1], _s[2], _s[3]) for _s in traj1.tolist()]
-    # traj2.reverse()
-    traj2 = np.array(traj2)
-
-    # traj3
-    x = np.arange(0.5*road_width+init_length, -0.5*road_width-over_length, -speed_ms)
-    y = -0.25*road_width * np.ones((len(x), ))
-    phi = np.pi * np.ones((len(x), ))
-    v = speed * np.ones((len(x), ))
-    traj3 = np.vstack((x, y, phi, v)).transpose()
-
-    return traj1, traj2, traj3
-
-
-def _gen_trace_02():
-    x = np.arange(-init_length, over_length, speed_ms)
-    y = np.zeros((len(x), ))
-    phi = np.zeros((len(x), ))
-    v = speed * np.ones((len(x), ))
-    _traj1 = np.vstack((x, y, phi, v)).transpose()
-
-    traj_fun = lambda _x, _y, _phi, _v: (_y, -_x, _phi-0.5*np.pi, _v)
-
-    _traj2 = np.array([traj_fun(_s[0], _s[1], _s[2], _s[3]) for _s in _traj1.tolist()])
-    _traj3 = np.array([traj_fun(_s[0], _s[1], _s[2], _s[3]) for _s in _traj2.tolist()])
-    _traj4 = np.array([traj_fun(_s[0], _s[1], _s[2], _s[3]) for _s in _traj3.tolist()])
-
-    return _traj1, _traj2, _traj3, _traj4
-
-def _draw_from_info(infos):
-    from matplotlib import animation, rc, patches
-    fig, ax = plt.subplots()
-
-    cars = {
-        car_id: patches.Rectangle((0, 0), KinematicModel.default_config["length"], KinematicModel.default_config["width"])
-        for car_id in infos[0]['old_state'].keys()
-            }
-    [ax.add_patch(car_obj) for car_obj in cars.values()]
-
-    max_length = max((init_length, over_length))
-    # plt.plot([-max_length, max_length], [0.5*road_width, 0.5*road_width], color="black")
-    # plt.plot([-max_length, -0.5*road_width], [-0.5*road_width, -0.5*road_width], color="black")
-    # plt.plot([0.5*road_width, max_length], [-0.5*road_width, -0.5*road_width], color="black")
-    # plt.plot([-0.5*road_width, -0.5*road_width], [-0.5*road_width, -max_length-0.5*road_width], color="black")
-    # plt.plot([0.5*road_width, 0.5*road_width], [-0.5*road_width, -max_length-0.5*road_width], color="black")
-
-    def _get_state(all_infos) -> Dict[int, np.ndarray]:
-        ret = {veh_id: np.zeros((len(infos)+1, 4)) for veh_id in all_infos[0]['old_state'].keys()}
-        for veh_id in ret.keys():
-            ret[veh_id][0] = all_infos[0]['old_state'][veh_id]
-        for _t, one_info in enumerate(all_infos):
-            for veh_id in ret.keys():
-                ret[veh_id][_t] = one_info['new_state'][veh_id]
-        return ret
-
-    def _get_nominal(all_infos) -> Dict[int, np.ndarray]:
-        ret = {veh_id: np.zeros((len(infos), KinematicModel.default_config["pred_len"]+1, 4)) for veh_id in all_infos[0]['old_state'].keys()}
-        for _t, one_info in enumerate(all_infos):
-            for veh_id in ret.keys():
-                ret[veh_id][_t] = one_info[DistributedMPC.default_config["run_iter"]-1][veh_id][0]
-        return ret
-
-    def pos_fun(state: np.ndarray):
-        assert state.shape == (4,)
-        x, y, phi, _ = state
-        W = KinematicModel.default_config["length"]
-        H = KinematicModel.default_config["width"]
-        k = 0.5 * np.sqrt(W**2 + H**2)
-        beta = 0.5*np.pi - phi - np.arctan(H / W)
-        x_ = x - k * np.sin(beta)
-        y_ = y - k * np.cos(beta)
-        return x_, y_
-
-    all_states = _get_state(infos)
-    all_nominals = _get_nominal(infos)
-
-    car_nominals = {}
-    for v_id, v_nominals in all_nominals.items():
-        line_obj = ax.plot(v_nominals[0][:, 0], v_nominals[0][:, 1], color="red")
-        car_nominals[v_id] = line_obj[0]
-
-    # ax.add_patch(ref_car)
-    def update(frame):
-        for car_id, car_obj in cars.items():
-            _state = all_states[car_id][frame]
-            car_obj.set_xy(pos_fun(_state))
-            car_obj.set_angle(np.rad2deg(_state[2]))
-        for car_id, line_obj in car_nominals.items():
-            _nom = all_nominals[car_id][frame]
-            line_obj.set_xdata(_nom[:, 0])
-            line_obj.set_ydata(_nom[:, 1])
-        plt.xlim(-max_length, max_length)
-        plt.ylim(-max_length, max_length)
-        ax.set_aspect('equal')
-        ax.margins(0)
-    anim = animation.FuncAnimation(fig, update, frames=len(infos), interval=100)
-    writer = animation.FFMpegWriter(fps=10)
-    anim.save('video/one_veh.mp4', writer=writer)
-    plt.close()
 
 
 if __name__ == "__main__":
@@ -454,24 +315,3 @@ if __name__ == "__main__":
     # # plt.axis('equal')
     # # plt.show()
     # _draw_from_info(step_infos)
-
-    # +
-    traj1, traj2, traj3, traj4 = _gen_trace_02()
-    mpc_01 = DistributedMPC(DistributedMPC.default_config, traj1[0], traj1, 1)
-    mpc_02 = DistributedMPC(DistributedMPC.default_config, traj2[0], traj2, 2)
-    mpc_03 = DistributedMPC(DistributedMPC.default_config, traj3[0], traj3, 3)
-    mpc_04 = DistributedMPC(DistributedMPC.default_config, traj4[0], traj4, 4)
-    run_steps = min((traj1.shape[0], traj2.shape[0], traj3.shape[0], traj4.shape[0])) - KinematicModel.default_config["pred_len"]
-    # mpc_01_log = np.zeros((run_steps, 4))
-    # mpc_02_log = np.zeros((run_steps, 4))
-    step_infos = list()
-    for i in range(run_steps):
-        step_info = DistributedMPC.step_all()
-        step_infos.append(step_info)
-    #     mpc_01_log[i] = step_info["new_state"][1]
-    #     mpc_02_log[i] = step_info["new_state"][2]
-    # plt.plot(mpc_01_log[:, 0], mpc_01_log[:, 1])
-    # plt.plot(mpc_02_log[:, 0], mpc_02_log[:, 1])
-    # plt.axis('equal')
-    # plt.show()
-    _draw_from_info(step_infos)

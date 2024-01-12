@@ -72,6 +72,7 @@ class suppress_stdout_stderr(object):
         os.close(self.null_fds[0])
         os.close(self.null_fds[1])
 
+
 def GenerateSpecificTrace(main_num: int, merge_num: int, count: int = 10):
     while count:
         count -= 1

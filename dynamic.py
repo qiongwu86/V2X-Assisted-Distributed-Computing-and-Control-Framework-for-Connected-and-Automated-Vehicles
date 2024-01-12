@@ -53,8 +53,8 @@ class KinematicModel:
     default_config = dict(
         length=4.0,
         width=1.7,
-        acc_min=-5.0,
-        acc_max=5.0,
+        acc_min=-7.0,
+        acc_max=7.0,
         steer_min=-np.deg2rad(34),
         steer_max=np.deg2rad(34),
         # acc_min=-np.inf,
@@ -63,7 +63,7 @@ class KinematicModel:
         # steer_max=np.inf,
         delta_T=0.1,
         pred_len=30,
-        safe_th=2.0
+        safe_th=5.0
     )
 
     def __init__(self, config: dict):
