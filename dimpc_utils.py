@@ -383,6 +383,67 @@ def cross_traj_double_lane(
     return all_traj, max_step, info_rounds, _gen_map_info()
 
 
+def multi_cross(
+        _points: int = 5,
+        _speed: float = 5.0,
+        _init_road_length: float = 5.0,
+        _over_road_length: float = 40.0,
+        _x_delta: float = 7.0,
+        _cross_region_length: float = 20
+) -> Tuple[List[np.ndarray], int, np.ndarray]:
+    def _gen_from_to() -> Tuple[np.ndarray, np.ndarray]:
+        _from_set = np.array([i for i in range(_points)])
+        _to_set = np.array([i for i in range(_points)])
+        _rest_shuffle_times = 100
+        while any(_from_set == _to_set) and _rest_shuffle_times:
+            np.random.shuffle(_to_set)
+            _rest_shuffle_times -= 1
+            if _rest_shuffle_times == 0:
+                raise ValueError
+        return _from_set, _to_set
+
+    def _gen_one_traj(_f: int, _t: int) -> Tuple[np.ndarray, int]:
+        _speed_100ms = _speed / 10
+        # part 1
+        y = np.arange(0.0, _init_road_length, _speed_100ms)
+        x = np.ones_like(y) * (_f * _x_delta)
+        phi = np.ones_like(y) * np.pi * 0.5
+        v = _speed * np.ones_like(y)
+
+        traj_p1 = np.vstack((x, y, phi, v)).transpose()
+        # part 2
+        _part2_point_num = int(_cross_region_length / _speed_100ms)
+        _delta_temp = (_t - _f) * _x_delta / _part2_point_num
+        x = np.array([_f*_x_delta + i*_delta_temp for i in range(_part2_point_num)])
+        _delta_temp = _cross_region_length / _part2_point_num
+        y = np.array([_init_road_length + i*_delta_temp for i in range(_part2_point_num)])
+        phi = np.zeros_like(x)
+        v = np.zeros_like(x)
+        traj_p2 = np.vstack((x, y, phi, v)).transpose()
+        # part 3
+        y = np.arange(
+            _init_road_length+_cross_region_length,
+            _init_road_length+_cross_region_length+_over_road_length,
+            _speed_100ms
+        )
+        x = np.ones_like(y) * (_t * _x_delta)
+        phi = np.ones_like(y) * np.pi * 0.5
+        v = _speed * np.ones_like(y)
+        traj_p3 = np.vstack((x, y, phi, v)).transpose()
+        _traj = np.vstack((traj_p1, traj_p2, traj_p3))
+        return _traj, _traj.shape[0]
+
+    all_traj = []
+    from_set, to_set = _gen_from_to()
+    max_length = 99999
+    for f, t in zip(from_set, to_set):
+        one_traj, traj_len = _gen_one_traj(f, t)
+        all_traj.append(one_traj)
+        max_length = min(max_length, traj_len - KinematicModel.default_config["pred_len"])
+
+    return all_traj, max_length, np.vstack((from_set, to_set))
+
+
 def gen_video_from_info(_all_info: List[Dict], _all_traj: List[np.ndarray], draw_nominal=True,
                         _map_info: MapInfo = None) -> None:
     def _get_nominal(_t: int, veh_id: int, _info: List[Dict]) -> np.ndarray:
@@ -466,12 +527,13 @@ if __name__ == "__main__":
     from dimpc import DistributedMPC
 
     # trajs, step_num = star_traj(3)
-    trajs, step_num, traj_info, map_info = cross_traj_double_lane(_round=3, _log_file="traj_info.npy")
+    # trajs, step_num, traj_info, map_info = cross_traj_double_lane(_round=3, _log_file="traj_info.npy")
     # trajs, step_num, traj_info, map_info = cross_traj_double_lane(_round=1)
     # np.save("traj_info", traj_info)
+    trajs, step_num, traj_info = multi_cross()
 
     # fig, ax = plt.subplots()
-    # [plt.plot(traj[:, 0], traj[:, 1], linewidth=0.5) for traj in trajs]
+    # # [plt.plot(traj[:, 0], traj[:, 1], linewidth=0.5) for traj in trajs]
     # ax.set_aspect('equal')
     # plt.show()
     # for traj in trajs:
@@ -486,4 +548,4 @@ if __name__ == "__main__":
     for _ in range(step_num):
         all_info.append(DistributedMPC.step_all())
 
-    gen_video_from_info(all_info, trajs, draw_nominal=False, _map_info=map_info)
+    gen_video_from_info(all_info, trajs, draw_nominal=False)
