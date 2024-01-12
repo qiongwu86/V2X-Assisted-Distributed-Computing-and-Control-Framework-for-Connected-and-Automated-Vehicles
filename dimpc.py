@@ -4,7 +4,17 @@ import osqp
 from dynamic import KinematicModel
 from scipy import sparse
 from utilit import suppress_stdout_stderr
-from typing import Dict
+from typing import Dict, List
+
+
+class OSQP_RESULT_INFO:
+    RUN_TIME = 0
+    SOLVE_TIME = 1
+    STATUS = 2
+    ITER_TIMES = 3
+    @staticmethod
+    def get_info_from_result(res) -> List:
+        return [res.info.run_time, res.info.solve_time, res.info.status, res.info.iter]
 
 
 class DistributedMPC:
@@ -13,7 +23,7 @@ class DistributedMPC:
         Qu=0.07 * np.eye(2),
         safe_factor=10.0,
         init_iter=10,
-        run_iter=5,
+        run_iter=10,
         sensing_distance=25.0,
         priority=False
     )
@@ -73,7 +83,8 @@ class DistributedMPC:
             else:
                 self._x_nominal_others.append(_all_mpc[mpc_id]._x_nominal.copy())
 
-    def _init_nominal(self):
+    def _init_nominal(self) -> List:
+        _ret_info = list()
         for i in range(self._init_iter):
             A, B, G, ks, bs = self._get_all_necessary_for_qp(self._u_nominal, x_nominal=self._x_nominal)
             P, Q, A, l, u = self._get_pqalu(self._x_t, self._ref_traj[self._t: self._t + self._pred_len], A, B, G, ks,
@@ -85,6 +96,7 @@ class DistributedMPC:
                 u_opt = np.array(result.x).reshape((self._pred_len, 2))
             self._u_nominal = u_opt
             self._x_nominal = self._kinematic_model.roll_out(self._x_t, u_opt)
+        return _ret_info
 
     def _get_all_necessary_for_qp(self,
                                   u_nominal: np.ndarray,
@@ -155,7 +167,7 @@ class DistributedMPC:
         self._step_forward_from_nominal()
         return self._x_t
 
-    def _inner_optimize(self):
+    def _inner_optimize(self) -> List:
         A, B, G, ks, bs = self._get_all_necessary_for_qp(self._u_nominal, x_nominal=self._x_nominal,
                                                          x_nominal_others=self._x_nominal_others)
         P, Q, A, l, u = self._get_pqalu(self._x_t, self._ref_traj[self._t: self._t + self._pred_len], A, B, G, ks,
@@ -167,6 +179,7 @@ class DistributedMPC:
         u_opt = np.array(result.x).reshape((self._pred_len, 2))
         self._u_nominal = u_opt
         self._x_nominal = self._kinematic_model.roll_out(self._x_t, u_opt)
+        return OSQP_RESULT_INFO.get_info_from_result(result)
 
     def _step_forward_from_nominal(self):
         u = self._u_nominal[0]
@@ -178,33 +191,36 @@ class DistributedMPC:
 
     @staticmethod
     def step_all() -> Dict:
+        step_info = dict()
+        for mpc_id, mpc in _all_mpc.items():
+            step_info[mpc_id] = dict()
         with suppress_stdout_stderr():
-            step_info = dict()
-
-            step_info["old_state"] = dict()
+            # collect old state
             for mpc_id, mpc in _all_mpc.items():
-                step_info["old_state"][mpc_id] = mpc._x_t
+                step_info[mpc_id]["old_state"] = mpc._x_t
 
+            # iter and optimize
+            for mpc_id, mpc in _all_mpc.items():
+                step_info[mpc_id]["nominal"] = list()
+                step_info[mpc_id]["osqp_res"] = list()
             for i in range(DistributedMPC._run_iter):
-                step_info[i] = dict()
-                for mpc_id, mpc in _all_mpc.items():
-                    step_info[i][mpc_id] = mpc.get_nominal()
                 # update nominal
                 for mpc_id, mpc in _all_mpc.items():
                     mpc._update_x_nominal_others()
-                # optimize
+                # optimize and get osqp info
                 for mpc_id, mpc in _all_mpc.items():
-                    mpc._inner_optimize()
+                    step_info[mpc_id]["osqp_res"].append(mpc._inner_optimize())
+                # collect nominal
+                for mpc_id, mpc in _all_mpc.items():
+                    step_info[mpc_id]["nominal"].append(mpc.get_nominal())
 
             # step forward
-            step_info["control"] = dict()
             for mpc_id, mpc in _all_mpc.items():
-                step_info["control"][mpc_id] = mpc._step_forward_from_nominal()
+                step_info[mpc_id]["control"] = mpc._step_forward_from_nominal()
 
             # collect new state
-            step_info["new_state"] = dict()
             for mpc_id, mpc in _all_mpc.items():
-                step_info["new_state"][mpc_id] = mpc._x_t
+                step_info[mpc_id]["new_state"] = mpc._x_t
         return step_info
 
     def test(self, x0, u_bar):

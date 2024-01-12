@@ -51,7 +51,7 @@ class LongitudeModel:
 class KinematicModel:
 
     default_config = dict(
-        length=4.0,
+        length=3.5,
         width=1.7,
         acc_min=-7.0,
         acc_max=7.0,
