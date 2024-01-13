@@ -22,7 +22,7 @@ class DistributedMPC:
         Qx=0.1 * np.diag((1.0, 1.0, 0, 0)),
         Qu=0.07 * np.eye(2),
         safe_factor=10.0,
-        init_iter=10,
+        init_iter=5,
         run_iter=10,
         sensing_distance=25.0,
         priority=False

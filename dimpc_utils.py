@@ -20,8 +20,7 @@ class ColorSet:
 class MapInfo:
     def __init__(self, _solid: List[Dict], _dashed: List[Dict] = None):
         self._solid = _solid
-        if _dashed is not None:
-            self._dashed = _dashed
+        self._dashed = _dashed if _dashed is not None else list()
 
     def plot_map(self, _ax, _lw=0.25):
         self.plot_solid(_ax, _lw)
@@ -385,12 +384,12 @@ def cross_traj_double_lane(
 
 def multi_cross(
         _points: int = 5,
-        _speed: float = 5.0,
-        _init_road_length: float = 5.0,
-        _over_road_length: float = 40.0,
+        _speed: float = 4.0,
+        _init_road_length: float = 10.0,
+        _over_road_length: float = 20.0,
         _x_delta: float = 7.0,
-        _cross_region_length: float = 20
-) -> Tuple[List[np.ndarray], int, np.ndarray]:
+        _cross_region_length: float = 50
+) -> Tuple[List[np.ndarray], int, np.ndarray, MapInfo]:
     def _gen_from_to() -> Tuple[np.ndarray, np.ndarray]:
         _from_set = np.array([i for i in range(_points)])
         _to_set = np.array([i for i in range(_points)])
@@ -433,6 +432,23 @@ def multi_cross(
         _traj = np.vstack((traj_p1, traj_p2, traj_p3))
         return _traj, _traj.shape[0]
 
+    def _gen_one_traj_map(_f: int, _t: int) -> List[Dict]:
+        _map_of_traj = list()
+        _map_of_traj.append(dict(
+            x=np.array([_f * _x_delta, _f * _x_delta]),
+            y=np.array([0.0, _init_road_length])
+        ))
+        _map_of_traj.append(dict(
+                x=np.array([_f * _x_delta, _t * _x_delta]),
+            y=np.array([_init_road_length, _init_road_length + _cross_region_length])
+        ))
+        _map_of_traj.append(dict(
+                x=np.array([_t * _x_delta, _t * _x_delta]),
+            y=np.array([_init_road_length+_cross_region_length, _init_road_length+_cross_region_length+_over_road_length])
+        ))
+        return _map_of_traj
+
+    _map_solid = list()
     all_traj = []
     from_set, to_set = _gen_from_to()
     max_length = 99999
@@ -440,8 +456,9 @@ def multi_cross(
         one_traj, traj_len = _gen_one_traj(f, t)
         all_traj.append(one_traj)
         max_length = min(max_length, traj_len - KinematicModel.default_config["pred_len"])
+        _map_solid = _map_solid + _gen_one_traj_map(f, t)
 
-    return all_traj, max_length, np.vstack((from_set, to_set))
+    return all_traj, max_length, np.vstack((from_set, to_set)), MapInfo(_map_solid)
 
 
 def gen_video_from_info(_all_info: List[Dict], _all_traj: List[np.ndarray], draw_nominal=True,
@@ -490,11 +507,11 @@ def gen_video_from_info(_all_info: List[Dict], _all_traj: List[np.ndarray], draw
     [ax.add_patch(car_obj_list[0]) for car_obj_list in cars.values()]
 
     # draw_range
-    x_max = max([np.max(one_traj[:, 0]) for one_traj in _all_traj] + [10]) + 5
-    x_min = min([np.min(one_traj[:, 0]) for one_traj in _all_traj] + [-10]) - 5
+    x_max = max([np.max(one_traj[:, 0]) for one_traj in _all_traj]) + 5
+    x_min = min([np.min(one_traj[:, 0]) for one_traj in _all_traj]) - 5
     x_range_draw = (x_min, x_max)
-    y_max = max([np.max(one_traj[:, 1]) for one_traj in _all_traj] + [10]) + 5
-    y_min = min([np.min(one_traj[:, 1]) for one_traj in _all_traj] + [-10]) - 5
+    y_max = max([np.max(one_traj[:, 1]) for one_traj in _all_traj]) + 5
+    y_min = min([np.min(one_traj[:, 1]) for one_traj in _all_traj]) - 5
     y_range_draw = (y_min, y_max)
 
     # ax.add_patch(ref_car)
@@ -530,7 +547,7 @@ if __name__ == "__main__":
     # trajs, step_num, traj_info, map_info = cross_traj_double_lane(_round=3, _log_file="traj_info.npy")
     # trajs, step_num, traj_info, map_info = cross_traj_double_lane(_round=1)
     # np.save("traj_info", traj_info)
-    trajs, step_num, traj_info = multi_cross()
+    trajs, step_num, traj_info, map_info = multi_cross(_points=8)
 
     # fig, ax = plt.subplots()
     # # [plt.plot(traj[:, 0], traj[:, 1], linewidth=0.5) for traj in trajs]
@@ -548,4 +565,4 @@ if __name__ == "__main__":
     for _ in range(step_num):
         all_info.append(DistributedMPC.step_all())
 
-    gen_video_from_info(all_info, trajs, draw_nominal=False)
+    gen_video_from_info(all_info, trajs, draw_nominal=False, _map_info=map_info)
