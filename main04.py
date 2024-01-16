@@ -1,4 +1,4 @@
-from dynamic_model import BicycleModel
+from dynamic_models.dynamic_model import BicycleModel
 import numpy as np
 from utilit import WatchOneVeh
 

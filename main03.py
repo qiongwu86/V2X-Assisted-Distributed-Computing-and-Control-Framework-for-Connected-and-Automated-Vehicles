@@ -1,10 +1,9 @@
 from env import EnvParam
 from trace_generate import AddTrace
 import matplotlib.pyplot as plt
-from dynamic_model import OneDimDynamic, init_system
+from dynamic_models.dynamic_model import OneDimDynamic, init_system
 from utilit import ProcessTrace, SceneDraw
 import pickle
-from solver_admm import WeightedADMM, FullADMM
 import numpy as np
 
 

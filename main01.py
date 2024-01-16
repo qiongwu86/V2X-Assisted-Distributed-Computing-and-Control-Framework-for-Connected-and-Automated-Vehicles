@@ -1,6 +1,6 @@
 import numpy as np
 from trace_generate import generate_test_trace
-from dynamic_model import init_system
+from dynamic_models.dynamic_model import init_system
 from solver_admm import InitSolver, SolverAdmm
 import matplotlib.pyplot as plt
 

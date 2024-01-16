@@ -1,10 +1,9 @@
 from env import EnvParam
-from trace_generate import AddTrace, TraceTestForMPC
+from trace_generate import AddTrace
 import matplotlib.pyplot as plt
-from dynamic_model import OneDimDynamic, init_system
-from utilit import ProcessTrace, PickleSave, PickleRead, SceneDraw
-import pickle
-from solver_admm import WeightedADMM, FullADMM, ILMPC
+from dynamic_models.dynamic_model import init_system
+from utilit import ProcessTrace, PickleSave, SceneDraw
+from solver_admm import FullADMM, ILMPC
 from tqdm import tqdm
 import numpy as np
 
