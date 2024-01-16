@@ -4,8 +4,6 @@ import matplotlib.pyplot as plt
 from typing import List, Dict, Text, Tuple
 from dynamic_models import KinematicModel
 
-_PRED_LEN = KinematicModel.pred_len+1
-
 
 class ColorSet:
     color_set: List = ['red', 'blue', 'green', 'cyan', 'magenta', 'yellow', 'black', 'orange', 'purple']
@@ -75,7 +73,7 @@ def star_traj(
     ret = list()
     for i in range(_veh_num):
         _one_traj = _gen_one_traj(i * inter_rad)
-        _max_step = min(_max_step, _one_traj.shape[0] - _PRED_LEN)
+        _max_step = min(_max_step, _one_traj.shape[0])
         ret.append(_one_traj)
 
     return ret, _max_step
@@ -184,7 +182,7 @@ def cross_traj(
 
         for _f, _t in zip(from_set, to_set):
             _one_traj = _gen_one_traj(_f, _t, _init_length_round, _over_length_round)
-            round_max_step = min(round_max_step, _one_traj.shape[0] - _PRED_LEN)
+            round_max_step = min(round_max_step, _one_traj.shape[0])
             one_round_all_traj.append(_one_traj)
         round_info = np.vstack((from_set, to_set))
         return one_round_all_traj, round_max_step, round_info
@@ -325,7 +323,7 @@ def cross_traj_double_lane(
 
         for _f, _t in zip(from_set, to_set):
             _one_traj = _gen_one_traj(_f, _t, _init_length_round, _over_length_round)
-            round_max_step = min(round_max_step, _one_traj.shape[0] - _PRED_LEN)
+            round_max_step = min(round_max_step, _one_traj.shape[0])
             one_round_all_traj.append(_one_traj)
         round_info = np.vstack((from_set, to_set))
         return one_round_all_traj, round_max_step, round_info
@@ -339,7 +337,7 @@ def cross_traj_double_lane(
     def _gen_map_info() -> MapInfo:
         # generate one and rotate to get others
         _road_length = max(_init_road_length, _over_road_length)
-        _solid = [
+        _solid: List = [
             dict(
                 x=np.array([0.5 * _road_width, 0.5 * _road_width]),
                 y=np.array([-0.5 * _road_width - _road_length, -0.5 * _road_width])
@@ -458,7 +456,7 @@ def multi_cross(
     for f, t in zip(from_set, to_set):
         one_traj, traj_len = _gen_one_traj(f, t)
         all_traj.append(one_traj)
-        max_length = min(max_length, traj_len - _PRED_LEN)
+        max_length = min(max_length, traj_len)
         _map_solid = _map_solid + _gen_one_traj_map(f, t)
 
     return all_traj, max_length, np.vstack((from_set, to_set)), MapInfo(_map_solid)
@@ -475,8 +473,8 @@ def gen_video_from_info(_all_info: List[Dict], _all_traj: List[np.ndarray], draw
     def pos_fun(state: np.ndarray):
         assert state.shape == (4,)
         x, y, phi, _ = state
-        W = KinematicModel.default_config["length"]
-        H = KinematicModel.default_config["width"]
+        W = KinematicModel.length
+        H = KinematicModel.width
         k = 0.5 * np.sqrt(W ** 2 + H ** 2)
         beta = 0.5 * np.pi - phi - np.arctan(H / W)
         x_ = x - k * np.sin(beta)
@@ -492,8 +490,8 @@ def gen_video_from_info(_all_info: List[Dict], _all_traj: List[np.ndarray], draw
         car_id: [
             patches.Rectangle(
                 (0, 0),
-                KinematicModel.default_config["length"],
-                KinematicModel.default_config["width"],
+                KinematicModel.length,
+                KinematicModel.width,
                 fill=True,
                 facecolor=ColorSet.get_next_color(),
                 edgecolor=None
@@ -539,7 +537,7 @@ def gen_video_from_info(_all_info: List[Dict], _all_traj: List[np.ndarray], draw
 
     anim = animation.FuncAnimation(fig, update, frames=len(_all_info), interval=100)
     writer = animation.FFMpegWriter(fps=10)
-    anim.save('video/one_veh.mp4', writer=writer)
+    anim.save('output_dir/video/one_veh.mp4', writer=writer)
     plt.close()
 
 
