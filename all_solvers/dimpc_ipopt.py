@@ -11,9 +11,9 @@ class DistributedMPCIPOPT:
     _initialized: bool = False
 
     default_config = dict(
-        Qx=0.1 * np.diag((1.0, 1.0, 1.5, 0)),
+        Qx=0.1 * np.diag((1.0, 1.0, 0.0, 0)),
         Qu=0.1 * np.diag([1.0, 0.1]),
-        comfort=1.0,
+        comfort=0.0,
         safe_factor=10.0,
         safe_th=5.0,
         init_iter=5,
@@ -80,10 +80,8 @@ class DistributedMPCIPOPT:
         # param
         x_0 = ca.MX.sym('x_0', 4)
         x_ref = ca.vertcat(*[ca.MX.sym('x_ref_' + str(i + 1), 4) for i in range(cls._pred_len)])
-        x_nominal_other = ca.vertcat(*[
-            ca.vertcat(*[ca.MX.sym('x_no_' + str(o) + str(i + 1), 4) for i in range(cls._pred_len)])
-            for o in range(cls._pred_len)
-        ])
+        x_nominal_other_list = [ca.MX.sym('x_no', cls._pred_len*4) for _ in range(cls._other_veh_num)]
+        x_nominal_other = ca.vertcat(*x_nominal_other_list)
 
         # dec var
         x_1_T = ca.vertcat(*[ca.MX.sym('x_' + str(i + 1), 4) for i in range(cls._pred_len)])
@@ -114,13 +112,19 @@ class DistributedMPCIPOPT:
         Qu = ca.DM(cls._Qu_big)
         Qc = ca.DM(cls._Q_comfort)
 
-        J = (x_1_T - x_ref).T @ Qx @ (x_1_T - x_ref) + u_0_T_1.T @ Qu @ u_0_T_1 + (Qc @ x_1_T).T @ (Qc @ x_1_T)
+        # obj
+        _fake_dist_func = cls._safe_constrain_constructor()
+        safe_vec = ca.vertcat(*[_fake_dist_func(x_1_T, a_nomi) for a_nomi in x_nominal_other_list])
+        J = (x_1_T - x_ref).T @ Qx @ (x_1_T - x_ref) + \
+            u_0_T_1.T @ Qu @ u_0_T_1 + \
+            (Qc @ x_1_T).T @ (Qc @ x_1_T) + \
+            safe_vec.T @ safe_vec
 
         nlp = {
             'x': ca.vertcat(u_0_T_1, x_1_T),
             'f': J,
             'g': g,
-            'p': ca.vertcat(x_0, x_ref)
+            'p': ca.vertcat(x_0, x_ref, x_nominal_other)
         }
 
         prob_option = dict(
@@ -133,6 +137,51 @@ class DistributedMPCIPOPT:
         )
 
         return ca.nlpsol('S_ipopt', 'ipopt', nlp, prob_option), lbx, ubx, lbg, ubg
+
+    @classmethod
+    def _safe_constrain_constructor(cls):
+        x_ego = ca.SX.sym('x_ego', 4)
+        x_other = ca.SX.sym('x_other', 4)
+
+        V = 0.5 * (KinematicModel.length - KinematicModel.width)
+        D = KinematicModel.width
+        th = cls._safe_th
+
+        _dist_inner = ca.fmin(
+            ca.vertcat(
+                ca.sqrt(
+                    (x_ego[0] - x_other[0] + V * (ca.cos(x_ego[2]) - ca.cos(x_other[2]))) ** 2 +
+                    (x_ego[1] - x_other[1] + V * (ca.sin(x_ego[2]) - ca.sin(x_other[2]))) ** 2
+                ) - D - th,
+                ca.sqrt(
+                    (x_ego[0] - x_other[0] + V * (ca.cos(x_ego[2]) + ca.cos(x_other[2]))) ** 2 +
+                    (x_ego[1] - x_other[1] + V * (ca.sin(x_ego[2]) + ca.sin(x_other[2]))) ** 2
+                ) - D - th,
+                ca.sqrt(
+                    (x_ego[0] - x_other[0] + V * (-ca.cos(x_ego[2]) - ca.cos(x_other[2]))) ** 2 +
+                    (x_ego[1] - x_other[1] + V * (-ca.sin(x_ego[2]) - ca.sin(x_other[2]))) ** 2
+                ) - D - th,
+                ca.sqrt(
+                    (x_ego[0] - x_other[0] + V * (-ca.cos(x_ego[2]) + ca.cos(x_other[2]))) ** 2 +
+                    (x_ego[1] - x_other[1] + V * (-ca.sin(x_ego[2]) + ca.sin(x_other[2]))) ** 2
+                ) - D - th,
+            ),
+            ca.SX.zeros(4)
+        )
+        _dist_inner_func = ca.Function('dist_inner_func', [x_ego, x_other], [_dist_inner])
+
+        _dist_all_list = []
+        _x_ego_all = ca.MX.sym('_x_ego_all', 4*cls._pred_len)
+        _x_other_all = ca.MX.sym('_x_other_all', 4*cls._pred_len)
+        for i in range(cls._pred_len):
+            _dist_all_list.append(
+                _dist_inner_func(_x_ego_all[i*4: (i+1)*4], _x_other_all[i*4: (i+1)*4])
+            )
+
+        _dist_all = ca.vertcat(*_dist_all_list)
+        _dist_all_func = ca.Function('dist_all_func', [_x_ego_all, _x_other_all], [_dist_all])
+
+        return _dist_all_func
 
     @classmethod
     def _gen_Q_comfort(cls) -> np.ndarray:
@@ -178,8 +227,8 @@ class DistributedMPCIPOPT:
         for mpc_id, mpc in _all_mpc.items():
             if mpc_id == self._mpc_id:
                 continue
-            if np.linalg.norm(self.position - mpc.position) <= self._sensing_distance:
-                ids_in_range_dict[mpc_id] = np.linalg.norm(self.position - mpc.position)
+            # if np.linalg.norm(self.position - mpc.position) <= self._sensing_distance:
+            ids_in_range_dict[mpc_id] = np.linalg.norm(self.position - mpc.position)
         ids_in_range = sorted(ids_in_range_dict.keys(), key=lambda _id: ids_in_range_dict[_id])
         # get nominal
         self._x_nominal_others.clear()
@@ -194,16 +243,22 @@ class DistributedMPCIPOPT:
 
     def _solve_ego_prob(self):
         # param: x0, x_ref
-        p = np.concatenate((self._x_t, self._ref_traj[self._t+1: self._t+1+self._pred_len].reshape(-1)))
-        r_ipopt = self._nlp_solver(lbg=self._lbg, ubg=self._ubg, lbx=self._lbx, ubx=self._ubx, p=p)
+        x0 = np.concatenate((self._u_nominal.reshape(-1), self._x_nominal[1:].reshape(-1)))
+        x_nominal_other_vec = np.concatenate([a_nominal[1:].reshape(-1) for a_nominal in self._x_nominal_others])
+        p = np.concatenate((
+            self._x_t,
+            self._ref_traj[self._t+1: self._t+1+self._pred_len].reshape(-1),
+            x_nominal_other_vec
+        ))
+        r_ipopt = self._nlp_solver(x0=x0, lbg=self._lbg, ubg=self._ubg, lbx=self._lbx, ubx=self._ubx, p=p)
         res = r_ipopt['x']
         self._u_nominal = np.array(res[: 2*self._pred_len]).reshape((self._pred_len, 2))
         self._x_nominal = KinematicModel.roll_out(self._x_t, self._u_nominal)
 
     def _init_nominal(self):
-        with suppress_stdout_stderr():
-            self._solve_ego_prob()
-        print("vehicle {} init complete.".format(self._mpc_id))
+        # with suppress_stdout_stderr():
+        #     self._solve_ego_prob()
+        print("vehicle {} init complete. We do not initial nominal.".format(self._mpc_id))
 
     def get_nominal(self) -> Tuple[np.ndarray, np.ndarray]:
         return self._x_nominal, self._u_nominal
@@ -227,10 +282,10 @@ class DistributedMPCIPOPT:
         # # iter and optimize
         for mpc_id, mpc in _all_mpc.items():
             step_info[mpc_id]["nominal"] = list()
-        #     step_info[mpc_id]["osqp_res"] = list()
+        # collect nominal
+        for mpc_id, mpc in _all_mpc.items():
+            mpc._update_x_nominal_others()
         with suppress_stdout_stderr():
-            for mpc_id, mpc in _all_mpc.items():
-                mpc._update_x_nominal_others()
             # optimize and get osqp info and collect nominal
             for mpc_id, mpc in _all_mpc.items():
                 mpc._solve_ego_prob()

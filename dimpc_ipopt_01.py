@@ -7,7 +7,7 @@ mpc_config['run_iter'] = 5
 mpc_config['safe_factor'] = 2.5
 mpc_config['safe_th'] = 1.7
 mpc_config['pred_len'] = 30
-mpc_config['other_veh_num'] = 4
+mpc_config['other_veh_num'] = 3
 mpc_config['comfort'] = 1.5
 
 KinematicModel.initialize(KinematicModel.default_config)

@@ -23,7 +23,8 @@ class DistributedMPC:
         sensing_distance=25.0,
         priority=False,
         pred_len=30,
-        other_veh_num=3
+        other_veh_num=3,
+        warm_start=True,
     )
 
     _init_iter: int = 5
@@ -35,6 +36,7 @@ class DistributedMPC:
     _priority: bool = False
     _pred_len: int = 30
     _other_veh_num: int = 3
+    _warm_start: bool = True
 
     _Q_comfort: np.ndarray = None
     _Qx_big: np.ndarray = None
@@ -61,6 +63,7 @@ class DistributedMPC:
         cls._priority = config["priority"]
         cls._pred_len = config["pred_len"]
         cls._other_veh_num = config["other_veh_num"]
+        cls._warm_start = config["warm_start"]
 
         cls._Qx_big = np.kron(np.eye(cls._pred_len), config["Qx"])
         cls._Qx_big[-4:, -4:] = 10 * config["Qx"]
@@ -91,10 +94,11 @@ class DistributedMPC:
         assert init_state.shape == (4,)
         self._x_t: np.ndarray = init_state
         self._u_nominal: np.ndarray = np.zeros((self._pred_len + 0, 2))
-        self._x_nominal = KinematicModel.roll_out(self._x_t, self._u_nominal)
+        self._x_nominal: np.ndarray = KinematicModel.roll_out(self._x_t, self._u_nominal)
         self._x_nominal_others: List[np.ndarray] = list()
         self._t: int = 0
         self._init_nominal()
+        self._y_warm: np.ndarray = np.zeros((self._pred_len * 2))
 
     @property
     def max_step(self):
@@ -136,7 +140,7 @@ class DistributedMPC:
                 prob = osqp.OSQP()
                 prob.setup(P, Q, A, l, u)
                 result = prob.solve()
-                u_opt = np.array(result.x).reshape((self._pred_len, 2))
+            u_opt = np.array(result.x).reshape((self._pred_len, 2))
             self._u_nominal = u_opt
             self._x_nominal = KinematicModel.roll_out(self._x_t, u_opt)
 
@@ -210,10 +214,13 @@ class DistributedMPC:
         # with suppress_stdout_stderr():
         prob = osqp.OSQP()
         prob.setup(P, Q, A, l, u)
+        if self._warm_start:
+            prob.warm_start(x=self._u_nominal.reshape(-1), y=self._y_warm)
         result = prob.solve()
         u_opt = np.array(result.x).reshape((self._pred_len, 2))
         self._u_nominal = u_opt
         self._x_nominal = KinematicModel.roll_out(self._x_t, u_opt)
+        self._y_warm = result.y
         return OSQP_RESULT_INFO.get_info_from_result(result)
 
     def _step_forward_from_nominal(self):
