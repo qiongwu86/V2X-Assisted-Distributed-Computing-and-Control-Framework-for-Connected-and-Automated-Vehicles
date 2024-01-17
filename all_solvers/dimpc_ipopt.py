@@ -1,10 +1,9 @@
 import numpy as np
-import osqp
 from dynamic_models import KinematicModel
-from scipy import sparse
-from utilits import suppress_stdout_stderr, OSQP_RESULT_INFO
+from utilits import suppress_stdout_stderr
 from typing import Dict, List, Tuple, Callable
-import casadi
+import casadi as ca
+import tqdm
 
 
 class DistributedMPCIPOPT:
@@ -12,7 +11,7 @@ class DistributedMPCIPOPT:
     _initialized: bool = False
 
     default_config = dict(
-        Qx=0.1 * np.diag((1.0, 1.0, 0.0, 0)),
+        Qx=0.1 * np.diag((1.0, 1.0, 1.5, 0)),
         Qu=0.1 * np.diag([1.0, 0.1]),
         comfort=1.0,
         safe_factor=10.0,
@@ -38,13 +37,11 @@ class DistributedMPCIPOPT:
     _Q_comfort: np.ndarray = None
     _Qx_big: np.ndarray = None
     _Qu_big: np.ndarray = None
-
-    _AA_fun: Callable = None
-    _BB_fun: Callable = None
-    _GG_fun: Callable = None
-    _k_fun: Callable = None
-    _b_fun: Callable = None
-    _dist_fun: Callable = None
+    _nlp_solver = None
+    _lbx = None
+    _ubx = None
+    _lbg = None
+    _ubg = None
 
     @classmethod
     def initialize(cls, config: Dict):
@@ -65,9 +62,77 @@ class DistributedMPCIPOPT:
         cls._Qx_big[-4:, -4:] = 10 * config["Qx"]
         cls._Qu_big = np.kron(np.eye(cls._pred_len), config["Qu"])
         cls._Q_comfort = cls._gen_Q_comfort()
+        cls._nlp_solver, cls._lbx, cls._ubx, cls._lbg, cls._ubg = cls._gen_nlp_solver()
 
-        cls._AA_fun, cls._BB_fun, cls._GG_fun = cls._dynamic_constrain()
-        cls._k_fun, cls._b_fun, cls._dist_fun = cls._safe_constrain_constructor()
+    @classmethod
+    def _gen_nlp_solver(cls):
+        delta_T = KinematicModel.delta_T
+        _state = ca.SX.sym('state', 4)
+        _control = ca.SX.sym('control', 2)
+        _state_dot = ca.vertcat(
+            _state[3, 0] * ca.cos(_state[2, 0] + ca.arctan(0.5 * ca.tan(_control[1, 0]))),
+            _state[3, 0] * ca.sin(_state[2, 0] + ca.arctan(0.5 * ca.tan(_control[1, 0]))),
+            _state[3, 0] * ca.sin(ca.arctan(0.5 * ca.tan(_control[1, 0]))) / (0.5 * 3.5),
+            _control[0, 0]
+        )
+        _state_next = ca.Function('state_next_func', [_state, _control], [delta_T * _state_dot + _state])
+
+        # param
+        x_0 = ca.MX.sym('x_0', 4)
+        x_ref = ca.vertcat(*[ca.MX.sym('x_ref_' + str(i + 1), 4) for i in range(cls._pred_len)])
+        x_nominal_other = ca.vertcat(*[
+            ca.vertcat(*[ca.MX.sym('x_no_' + str(o) + str(i + 1), 4) for i in range(cls._pred_len)])
+            for o in range(cls._pred_len)
+        ])
+
+        # dec var
+        x_1_T = ca.vertcat(*[ca.MX.sym('x_' + str(i + 1), 4) for i in range(cls._pred_len)])
+        u_0_T_1 = ca.vertcat(*[ca.MX.sym('u_' + str(i), 2) for i in range(cls._pred_len)])
+
+        # constrain - g
+        lbg = [0, 0, 0, 0]
+        ubg = [0, 0, 0, 0]
+        g_list = [x_1_T[:4] - _state_next(x_0, u_0_T_1[:2])]
+        for i in range(1, cls._pred_len):
+            g_list.append(x_1_T[i*4: (i+1)*4] - _state_next(x_1_T[(i - 1)*4: i*4], u_0_T_1[i*2: (i+1)*2]))
+            lbg += [0, 0, 0, 0]
+            ubg += [0, 0, 0, 0]
+        g = ca.vertcat(*g_list)
+
+        # constrain - x
+        lbx = [
+                i for pair in zip(KinematicModel.acc_min*np.ones((cls._pred_len,)),
+                                  KinematicModel.steer_min*np.ones((cls._pred_len,))) for i in pair
+        ] + [-np.inf for _ in range(cls._pred_len*4)]
+
+        ubx = [
+                i for pair in zip(KinematicModel.acc_max*np.ones((cls._pred_len,)),
+                                  KinematicModel.steer_max*np.ones((cls._pred_len,))) for i in pair
+        ] + [+np.inf for _ in range(cls._pred_len*4)]
+
+        Qx = ca.DM(cls._Qx_big)
+        Qu = ca.DM(cls._Qu_big)
+        Qc = ca.DM(cls._Q_comfort)
+
+        J = (x_1_T - x_ref).T @ Qx @ (x_1_T - x_ref) + u_0_T_1.T @ Qu @ u_0_T_1 + (Qc @ x_1_T).T @ (Qc @ x_1_T)
+
+        nlp = {
+            'x': ca.vertcat(u_0_T_1, x_1_T),
+            'f': J,
+            'g': g,
+            'p': ca.vertcat(x_0, x_ref)
+        }
+
+        prob_option = dict(
+            # verbose=False,
+            # verbose_init=False,
+            # print_in=False,
+            # print_out=False,
+            # print_time=False,
+            record_time=True,
+        )
+
+        return ca.nlpsol('S_ipopt', 'ipopt', nlp, prob_option), lbx, ubx, lbg, ubg
 
     @classmethod
     def _gen_Q_comfort(cls) -> np.ndarray:
@@ -127,93 +192,21 @@ class DistributedMPCIPOPT:
             else:
                 self._x_nominal_others.append(_all_mpc[mpc_id]._x_nominal.copy())
 
+    def _solve_ego_prob(self):
+        # param: x0, x_ref
+        p = np.concatenate((self._x_t, self._ref_traj[self._t+1: self._t+1+self._pred_len].reshape(-1)))
+        r_ipopt = self._nlp_solver(lbg=self._lbg, ubg=self._ubg, lbx=self._lbx, ubx=self._ubx, p=p)
+        res = r_ipopt['x']
+        self._u_nominal = np.array(res[: 2*self._pred_len]).reshape((self._pred_len, 2))
+        self._x_nominal = KinematicModel.roll_out(self._x_t, self._u_nominal)
+
     def _init_nominal(self):
-        for i in range(self._init_iter):
-            A, B, G, ks, bs = self._get_all_necessary_for_qp()
-            P, Q, A, l, u = self._get_pqalu(A, B, G, ks, bs)
-            with suppress_stdout_stderr():
-                prob = osqp.OSQP()
-                prob.setup(P, Q, A, l, u)
-                result = prob.solve()
-                u_opt = np.array(result.x).reshape((self._pred_len, 2))
-            self._u_nominal = u_opt
-            self._x_nominal = KinematicModel.roll_out(self._x_t, u_opt)
-
-    def _get_all_necessary_for_qp(self):
-        # param check and get A B G
-        assert self._u_nominal is not None and self._u_nominal.shape == (self._pred_len + 0, 2)
-        assert self._x_t.shape == (4,)
-        A, B, G = self.dynamic_constrain(u_bar=self._u_nominal, x_0=self._x_t)
-
-        # k and b
-        ks = list()
-        bs = list()
-        if self._x_nominal_others is not None:
-            # need calculate k, b
-            for i in range(len(self._x_nominal_others)):
-                x_nominal_other = self._x_nominal_others[i]
-                assert x_nominal_other.shape == (self._pred_len + 1, 4)
-                k, b = self.safe_constrain(self._x_nominal[1:], x_nominal_other[1:])
-                ks.append(k)
-                bs.append(b)
-
-        return A, B, G, ks, bs
-
-    def _get_pqalu(self, A: np.ndarray, B: np.ndarray, G: np.ndarray, ks: list[np.ndarray], bs: list[np.ndarray]):
-        # param check
-        assert A.shape == (self._pred_len * 4, 4)
-        assert B.shape == (self._pred_len * 4, self._pred_len * 2)
-        assert G.shape == (self._pred_len * 4,)
-        assert isinstance(ks, list) and all([k.shape == (self._pred_len * 4, self._pred_len * 4) for k in ks])
-        assert isinstance(bs, list) and all([b.shape == (self._pred_len * 4,) for b in bs])
-        x_ref = self._ref_traj[self._t+1: self._t+1+self._pred_len].reshape(-1)
-
-        MAT_1 = self._Qx_big + sum([k.transpose() @ k for k in ks]) + self._Q_comfort.transpose() @ self._Q_comfort
-        P = sparse.csc_matrix(B.transpose() @ MAT_1 @ B + self._Qu_big)
-        Q = B.transpose() @ (
-                MAT_1 @ (A @ self._x_t + G) + sum([k.transpose()@b for k, b in zip(ks, bs)]) - self._Qx_big @ x_ref
-        )
-
-        '''
-        P = sparse.csc_matrix(
-            B.transpose() @ self._Qx_big @ B + self._Qu_big +
-            self._safe_factor * sum([(k @ B).transpose() @ (k @ B) for k in ks]) +
-            (self._Q_comfort @ B).transpose() @ (self._Q_comfort @ B)
-        )
-        Q = B.transpose() @ self._Qx_big @ (A @ self._x_t + G - x_ref) + \
-            self._safe_factor * sum([(k @ B).transpose() @ (k @ A @ self._x_t + k @ G + b) for k, b in zip(ks, bs)]) + \
-            (self._Q_comfort @ B).transpose() @ (self._Q_comfort @ A @ self._x_t + self._Q_comfort @ G)
-        '''
-
-        # not include x constrain now
-        A = sparse.csc_matrix(np.eye(self._pred_len * 2))
-        l = np.kron(np.ones((self._pred_len,)), np.array([KinematicModel.acc_min,
-                                                          KinematicModel.steer_min]))
-        u = np.kron(np.ones((self._pred_len,)), np.array([KinematicModel.acc_max,
-                                                          KinematicModel.steer_max]))
-
-        assert P.shape == (self._pred_len * 2, self._pred_len * 2)
-        assert Q.shape == (self._pred_len * 2,)
-        assert A.shape == (self._pred_len * 2, self._pred_len * 2)
-        assert l.shape == (self._pred_len * 2,)
-        assert u.shape == (self._pred_len * 2,)
-
-        return P, Q, A, l, u
+        with suppress_stdout_stderr():
+            self._solve_ego_prob()
+        print("vehicle {} init complete.".format(self._mpc_id))
 
     def get_nominal(self) -> Tuple[np.ndarray, np.ndarray]:
         return self._x_nominal, self._u_nominal
-
-    def _inner_optimize(self) -> List:
-        A, B, G, ks, bs = self._get_all_necessary_for_qp()
-        P, Q, A, l, u = self._get_pqalu(A, B, G, ks, bs)
-        # with suppress_stdout_stderr():
-        prob = osqp.OSQP()
-        prob.setup(P, Q, A, l, u)
-        result = prob.solve()
-        u_opt = np.array(result.x).reshape((self._pred_len, 2))
-        self._u_nominal = u_opt
-        self._x_nominal = KinematicModel.roll_out(self._x_t, u_opt)
-        return OSQP_RESULT_INFO.get_info_from_result(result)
 
     def _step_forward_from_nominal(self):
         u = self._u_nominal[0]
@@ -223,162 +216,39 @@ class DistributedMPCIPOPT:
         self._t += 1
         return u
 
-    @classmethod
-    def _dynamic_constrain(cls):
-        x_t = casadi.SX.sym('x_t', 4)
-        u_t = casadi.SX.sym('u_t', 2)
-        x_dot = casadi.vertcat(
-            x_t[3, 0] * casadi.cos(x_t[2, 0] + casadi.arctan(0.5 * casadi.tan(u_t[1, 0]))),
-            x_t[3, 0] * casadi.sin(x_t[2, 0] + casadi.arctan(0.5 * casadi.tan(u_t[1, 0]))),
-            x_t[3, 0] * casadi.sin(casadi.arctan(0.5 * casadi.tan(u_t[1, 0]))) / (0.5 * KinematicModel.length),
-            u_t[0, 0]
-        )
-        F1 = casadi.Function('F1', [x_t, u_t], [KinematicModel.delta_T * x_dot + x_t])
-
-        x0 = casadi.MX.sym('x_0', 4)
-        x_current = x0
-        x_list = []
-        u_list = []
-        for i in range(cls._pred_len):
-            u_current = casadi.MX.sym('u_' + str(i), 2)
-            x_current_ = F1(x_current, u_current)
-            x_list.append(x_current_)
-            u_list.append(u_current)
-
-            x_current = x_current_
-
-        x_1_T = casadi.vertcat(*x_list)
-        u_1_T = casadi.vertcat(*u_list)
-        AA_fun = casadi.Function(
-            "A_fun",
-            [x0, u_1_T],
-            [casadi.jacobian(x_1_T, x0)],
-        )
-        BB_fun = casadi.Function(
-            "B_fun",
-            [x0, u_1_T],
-            [casadi.jacobian(x_1_T, u_1_T)],
-        )
-        GG_fun = casadi.Function(
-            "G_fun",
-            [x0, u_1_T],
-            [x_1_T - casadi.jacobian(x_1_T, x0) @ x0 - casadi.jacobian(x_1_T, u_1_T) @ u_1_T],
-        )
-        return AA_fun, BB_fun, GG_fun
-
-    @classmethod
-    def dynamic_constrain(cls, u_bar: np.ndarray, x_0: np.ndarray):
-        assert cls._initialized
-        assert u_bar is not None and u_bar.shape == (cls._pred_len, 2)
-        assert x_0.shape == (4,)
-
-        AA = np.array(cls._AA_fun(x_0, u_bar.reshape(-1)))
-        BB = np.array(cls._BB_fun(x_0, u_bar.reshape(-1)))
-        GG = np.array(cls._GG_fun(x_0, u_bar.reshape(-1))).reshape(-1)
-
-        return AA, BB, GG
-
-    @classmethod
-    def _safe_constrain_constructor(cls):
-        x_ego = casadi.SX.sym('x_ego', 4)
-        x_other = casadi.SX.sym('x_other', 4)
-
-        V = 0.5 * (KinematicModel.length - KinematicModel.width)
-        D = KinematicModel.width
-        th = cls._safe_th
-
-        _dist_inner = casadi.fmin(
-            casadi.vertcat(
-                casadi.sqrt(
-                    (x_ego[0] - x_other[0] + V * (casadi.cos(x_ego[2]) - casadi.cos(x_other[2]))) ** 2 +
-                    (x_ego[1] - x_other[1] + V * (casadi.sin(x_ego[2]) - casadi.sin(x_other[2]))) ** 2
-                ) - D - th,
-                casadi.sqrt(
-                    (x_ego[0] - x_other[0] + V * (casadi.cos(x_ego[2]) + casadi.cos(x_other[2]))) ** 2 +
-                    (x_ego[1] - x_other[1] + V * (casadi.sin(x_ego[2]) + casadi.sin(x_other[2]))) ** 2
-                ) - D - th,
-                casadi.sqrt(
-                    (x_ego[0] - x_other[0] + V * (-casadi.cos(x_ego[2]) - casadi.cos(x_other[2]))) ** 2 +
-                    (x_ego[1] - x_other[1] + V * (-casadi.sin(x_ego[2]) - casadi.sin(x_other[2]))) ** 2
-                ) - D - th,
-                casadi.sqrt(
-                    (x_ego[0] - x_other[0] + V * (-casadi.cos(x_ego[2]) + casadi.cos(x_other[2]))) ** 2 +
-                    (x_ego[1] - x_other[1] + V * (-casadi.sin(x_ego[2]) + casadi.sin(x_other[2]))) ** 2
-                ) - D - th,
-            ),
-            casadi.SX.zeros(4)
-        )
-        _dist_inner_func = casadi.Function('dist_inner_func', [x_ego, x_other], [_dist_inner])
-
-        _dist_all_list = []
-        _x_ego_all = casadi.MX.sym('_x_ego_all', 4*cls._pred_len)
-        _x_other_all = casadi.MX.sym('_x_other_all', 4*cls._pred_len)
-        for i in range(cls._pred_len):
-            _dist_all_list.append(
-                _dist_inner_func(_x_ego_all[i*4: (i+1)*4], _x_other_all[i*4: (i+1)*4])
-            )
-        _dist_all = casadi.vertcat(*_dist_all_list)
-
-        _dist_all_func = casadi.Function('dist_all_func', [_x_ego_all, _x_other_all], [_dist_all])
-        _k_func = casadi.Function('F_k', [_x_ego_all, _x_other_all], [casadi.jacobian(_dist_all, _x_ego_all)])
-        _b_func = casadi.Function('F_b', [_x_ego_all, _x_other_all], [_dist_all-casadi.jacobian(_dist_all, _x_ego_all)@_x_ego_all])
-
-        return _k_func, _b_func, _dist_all_func
-
-    @classmethod
-    def safe_constrain(cls, x_ego: np.ndarray, x_other: np.ndarray):
-        assert cls._initialized
-        assert x_ego.shape == (cls._pred_len, 4) and x_other.shape == (cls._pred_len, 4)
-        k = cls._k_fun(x_ego.reshape(-1), x_other.reshape(-1))
-        b = cls._b_fun(x_ego.reshape(-1), x_other.reshape(-1))
-        return np.array(k), np.array(b).reshape(-1)
-
-    @classmethod
-    def dist_calculator(cls, x_ego: np.ndarray, x_other: np.ndarray):
-        assert cls._initialized
-        assert x_ego.shape == (cls._pred_len, 4) and x_other.shape == (cls._pred_len, 4)
-        dist = cls._dist_fun(x_ego.reshape(-1), x_other.reshape(-1))
-        return np.array(dist)
-
     @staticmethod
     def step_all() -> Dict:
         step_info = dict()
         for mpc_id, mpc in _all_mpc.items():
             step_info[mpc_id] = dict()
+        # collect old state
+        for mpc_id, mpc in _all_mpc.items():
+            step_info[mpc_id]["old_state"] = mpc._x_t
+        # # iter and optimize
+        for mpc_id, mpc in _all_mpc.items():
+            step_info[mpc_id]["nominal"] = list()
+        #     step_info[mpc_id]["osqp_res"] = list()
         with suppress_stdout_stderr():
-            # collect old state
             for mpc_id, mpc in _all_mpc.items():
-                step_info[mpc_id]["old_state"] = mpc._x_t
-
-            # iter and optimize
+                mpc._update_x_nominal_others()
+            # optimize and get osqp info and collect nominal
             for mpc_id, mpc in _all_mpc.items():
-                step_info[mpc_id]["nominal"] = list()
-                step_info[mpc_id]["osqp_res"] = list()
-            for i in range(DistributedMPCIPOPT._run_iter):
-                # update nominal
-                for mpc_id, mpc in _all_mpc.items():
-                    mpc._update_x_nominal_others()
-                # optimize and get osqp info
-                for mpc_id, mpc in _all_mpc.items():
-                    step_info[mpc_id]["osqp_res"].append(mpc._inner_optimize())
-                # collect nominal
-                for mpc_id, mpc in _all_mpc.items():
-                    step_info[mpc_id]["nominal"].append(mpc.get_nominal())
-
-            # step forward
-            for mpc_id, mpc in _all_mpc.items():
-                step_info[mpc_id]["control"] = mpc._step_forward_from_nominal()
-
-            # collect new state
-            for mpc_id, mpc in _all_mpc.items():
-                step_info[mpc_id]["new_state"] = mpc._x_t
+                mpc._solve_ego_prob()
+                step_info[mpc_id]["nominal"].append(mpc.get_nominal())
+        # step forward
+        for mpc_id, mpc in _all_mpc.items():
+            step_info[mpc_id]["control"] = mpc._step_forward_from_nominal()
+        # collect new state
+        for mpc_id, mpc in _all_mpc.items():
+            step_info[mpc_id]["new_state"] = mpc._x_t
         return step_info
 
     @staticmethod
     def simulate() -> List:
         all_info = list()
         max_step = min([mpc_obj.max_step for mpc_obj in _all_mpc.values()])
-        for _ in range(max_step):
+        print("max step: {}".format(max_step))
+        for _ in tqdm.tqdm(range(max_step)):
             all_info.append(DistributedMPCIPOPT.step_all())
         return all_info
 

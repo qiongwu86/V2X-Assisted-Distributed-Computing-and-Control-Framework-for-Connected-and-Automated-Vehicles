@@ -5,6 +5,7 @@ from scipy import sparse
 from utilits import suppress_stdout_stderr, OSQP_RESULT_INFO
 from typing import Dict, List, Tuple, Callable
 import casadi
+import tqdm
 
 
 class DistributedMPC:
@@ -345,40 +346,36 @@ class DistributedMPC:
         step_info = dict()
         for mpc_id, mpc in _all_mpc.items():
             step_info[mpc_id] = dict()
+        # collect old state
+        for mpc_id, mpc in _all_mpc.items():
+            step_info[mpc_id]["old_state"] = mpc._x_t
+        # iter and optimize
+        for mpc_id, mpc in _all_mpc.items():
+            step_info[mpc_id]["nominal"] = list()
+            step_info[mpc_id]["osqp_res"] = list()
         with suppress_stdout_stderr():
-            # collect old state
-            for mpc_id, mpc in _all_mpc.items():
-                step_info[mpc_id]["old_state"] = mpc._x_t
-
-            # iter and optimize
-            for mpc_id, mpc in _all_mpc.items():
-                step_info[mpc_id]["nominal"] = list()
-                step_info[mpc_id]["osqp_res"] = list()
             for i in range(DistributedMPC._run_iter):
                 # update nominal
                 for mpc_id, mpc in _all_mpc.items():
                     mpc._update_x_nominal_others()
-                # optimize and get osqp info
+                # optimize and get osqp info and collect nominal
                 for mpc_id, mpc in _all_mpc.items():
                     step_info[mpc_id]["osqp_res"].append(mpc._inner_optimize())
-                # collect nominal
-                for mpc_id, mpc in _all_mpc.items():
                     step_info[mpc_id]["nominal"].append(mpc.get_nominal())
-
-            # step forward
-            for mpc_id, mpc in _all_mpc.items():
-                step_info[mpc_id]["control"] = mpc._step_forward_from_nominal()
-
-            # collect new state
-            for mpc_id, mpc in _all_mpc.items():
-                step_info[mpc_id]["new_state"] = mpc._x_t
+        # step forward
+        for mpc_id, mpc in _all_mpc.items():
+            step_info[mpc_id]["control"] = mpc._step_forward_from_nominal()
+        # collect new state
+        for mpc_id, mpc in _all_mpc.items():
+            step_info[mpc_id]["new_state"] = mpc._x_t
         return step_info
 
     @staticmethod
     def simulate() -> List:
         all_info = list()
         max_step = min([mpc_obj.max_step for mpc_obj in _all_mpc.values()])
-        for _ in range(max_step):
+        print("max step: {}".format(max_step))
+        for _ in tqdm.tqdm(range(max_step)):
             all_info.append(DistributedMPC.step_all())
         return all_info
 

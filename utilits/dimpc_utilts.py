@@ -233,57 +233,76 @@ def cross_traj_double_lane(
         _to_axis = (np.sqrt(2) - 1) * _half_road_width
         _r_small = (2 - np.sqrt(2)) * _half_road_width
         _r_big = np.sqrt(2) * _half_road_width
-        _r_small_speed = _speed
-        _straight_speed = speed_change(0.25 * 2 * _r_small, _r_small_speed, _road_width)
-        _r_big_speed = speed_change(0.25 * 2 * _r_small, _r_small_speed, 0.25 * 2 * _r_big)
-
-        # part 1
-        y = np.arange(-_half_road_width - _init_length_round, -_half_road_width, _speed / 10)
-        x = np.ones_like(y) * _to_axis
-        phi = np.ones_like(y) * np.pi * 0.5
-        v = _speed * np.ones_like(y)
-        traj_part1 = np.vstack((x, y, phi, v)).transpose()
-        # part 2
+        _to_1_speed = _speed
+        _to_2_speed = speed_change(
+            _init_road_length + _over_road_length + 0.25 * 2 * np.pi * _r_small,
+            _to_1_speed,
+            _init_road_length + _over_road_length + _road_width,
+        )
+        _to_3_speed = speed_change(
+            _init_road_length + _over_road_length + 0.25 * 2 * np.pi * _r_small,
+            _to_1_speed,
+            _init_road_length + _over_road_length + 0.25 * 2 * np.pi * _r_big,
+        )
+        # TODO: speed?
         if init_to == 1:
+            # part 1
+            y = np.arange(-_half_road_width - _init_length_round, -_half_road_width, _to_1_speed/10)
+            x = np.ones_like(y) * _to_axis
+            phi = np.ones_like(y) * np.pi * 0.5
+            v = _to_1_speed * np.ones_like(y)
+            traj_part1 = np.vstack((x, y, phi, v)).transpose()
             # traj_part2_1
-            _rad_speed_100ms = (_r_small_speed / 10) / _r_small
+            _rad_speed_100ms = (_to_1_speed / 10) / _r_small
             x = _half_road_width - np.cos(np.arange(0, 0.5 * np.pi, _rad_speed_100ms)) * _r_small
             y = -_half_road_width + np.sin(np.arange(0, 0.5 * np.pi, _rad_speed_100ms)) * _r_small
             phi = 0.5 * np.pi - np.arange(0, 0.5 * np.pi, _rad_speed_100ms)
-            v = _r_small_speed * np.ones_like(x)
+            v = _to_1_speed * np.ones_like(x)
             traj_part2_1 = np.vstack((x, y, phi, v)).transpose()
             # traj_part2_2
-            x = np.arange(_half_road_width, _half_road_width + _over_length_round, _speed / 10)
+            x = np.arange(_half_road_width, _half_road_width + _over_length_round, _to_1_speed/10)
             y = -np.ones_like(x) * _to_axis
             phi = np.zeros_like(x)
-            v = np.ones_like(x) * _speed
+            v = np.ones_like(x) * _to_1_speed
             traj_part2_2 = np.vstack((x, y, phi, v)).transpose()
         elif init_to == 2:
+            # part 1
+            y = np.arange(-_half_road_width - _init_length_round, -_half_road_width, _to_2_speed / 10)
+            x = np.ones_like(y) * _to_axis
+            phi = np.ones_like(y) * np.pi * 0.5
+            v = _speed * np.ones_like(y)
+            traj_part1 = np.vstack((x, y, phi, v)).transpose()
             # traj_part2_1
-            y = np.arange(-_half_road_width, _half_road_width, _straight_speed / 10)
+            y = np.arange(-_half_road_width, _half_road_width + _over_length_round, _to_2_speed / 10)
             x = np.ones_like(y) * _to_axis
             phi = np.ones_like(x) * 0.5 * np.pi
-            v = _straight_speed * np.ones_like(x)
+            v = _to_2_speed * np.ones_like(x)
             traj_part2_1 = np.vstack((x, y, phi, v)).transpose()
             # traj_part2_2
-            y = np.arange(_half_road_width, _half_road_width + _over_length_round, _speed / 10)
+            y = np.arange(_half_road_width, _half_road_width + _over_length_round, _to_2_speed / 10)
             x = np.ones_like(y) * _to_axis
             phi = np.ones_like(x) * 0.5 * np.pi
-            v = np.ones_like(x) * _speed
+            v = np.ones_like(x) * _to_2_speed
             traj_part2_2 = np.vstack((x, y, phi, v)).transpose()
         elif init_to == 3:
+            # part 1
+            y = np.arange(-_half_road_width - _init_length_round, -_half_road_width, _to_3_speed/10)
+            x = np.ones_like(y) * _to_axis
+            phi = np.ones_like(y) * np.pi * 0.5
+            v = _to_3_speed * np.ones_like(y)
+            traj_part1 = np.vstack((x, y, phi, v)).transpose()
             # traj_part2_1
-            _rad_speed_100ms = (_r_big_speed / 10) / _r_big
+            _rad_speed_100ms = (_to_3_speed / 10) / _r_big
             x = -_half_road_width + np.cos(np.arange(0, 0.5 * np.pi, _rad_speed_100ms)) * _r_big
             y = -_half_road_width + np.sin(np.arange(0, 0.5 * np.pi, _rad_speed_100ms)) * _r_big
             phi = 0.5 * np.pi + np.arange(0, 0.5 * np.pi, _rad_speed_100ms)
-            v = _r_big_speed * np.ones_like(x)
+            v = _to_3_speed * np.ones_like(x)
             traj_part2_1 = np.vstack((x, y, phi, v)).transpose()
             # traj_part2_2
-            x = np.arange(-_half_road_width, -_half_road_width - _over_length_round, -_speed / 10)
+            x = np.arange(-_half_road_width, -_half_road_width - _over_length_round, -_to_3_speed / 10)
             y = np.ones_like(x) * _to_axis
             phi = np.ones_like(x) * np.pi
-            v = np.ones_like(x) * _speed
+            v = np.ones_like(x) * _to_3_speed
             traj_part2_2 = np.vstack((x, y, phi, v)).transpose()
         else:
             raise ValueError
