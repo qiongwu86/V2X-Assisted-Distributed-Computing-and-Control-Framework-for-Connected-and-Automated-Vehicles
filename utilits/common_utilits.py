@@ -1,6 +1,7 @@
 import os
 from typing import List, Dict, Text
 import numpy as np
+import pickle
 
 
 class OSQP_RESULT_INFO:
@@ -24,7 +25,8 @@ class OSQP_RESULT_INFO:
         run_times = len(info_all[0][0]["osqp_res"])
         ret = {veh_id: {
             OSQP_RESULT_INFO._RUN_TIME: np.zeros((len(info_all), run_times)),
-            OSQP_RESULT_INFO._ITER_TIMES: np.zeros((len(info_all), run_times))
+            OSQP_RESULT_INFO._ITER_TIMES: np.zeros((len(info_all), run_times)),
+            OSQP_RESULT_INFO._SOLVE_TIME: np.zeros((len(info_all), run_times))
         } for veh_id in veh_ids}
         for i, one_time_info in enumerate(info_all):
             for veh_id in veh_ids:
@@ -32,6 +34,8 @@ class OSQP_RESULT_INFO:
                     np.array([res[OSQP_RESULT_INFO.RUN_TIME] for res in one_time_info[veh_id]["osqp_res"]])
                 ret[veh_id][OSQP_RESULT_INFO._ITER_TIMES][i, :] = \
                     np.array([res[OSQP_RESULT_INFO.ITER_TIMES] for res in one_time_info[veh_id]["osqp_res"]])
+                ret[veh_id][OSQP_RESULT_INFO._SOLVE_TIME][i, :] = \
+                    np.array([res[OSQP_RESULT_INFO.SOLVE_TIME] for res in one_time_info[veh_id]["osqp_res"]])
         return ret
 
 
@@ -64,3 +68,25 @@ class suppress_stdout_stderr(object):
         # Close the null files
         os.close(self.null_fds[0])
         os.close(self.null_fds[1])
+
+
+def PickleSave(thing, name: str) -> None:
+    with open(name, 'wb') as f:
+        pickle.dump(thing, f)
+
+
+def PickleRead(name: str):
+    with open(name, 'rb') as f:
+        obj = pickle.load(f)
+    return obj
+
+
+def moving_average_filter(data, window_size):
+    """
+    移动平均滤波算法
+    :param data: 待滤波的数据
+    :param window_size: 窗口大小
+    :return: 滤波后的数据
+    """
+    window = np.ones(window_size) / window_size
+    return np.convolve(data, window, mode='same')

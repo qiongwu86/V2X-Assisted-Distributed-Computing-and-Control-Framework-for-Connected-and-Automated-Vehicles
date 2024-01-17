@@ -25,6 +25,7 @@ class DistributedMPC:
         pred_len=30,
         other_veh_num=3,
         warm_start=True,
+        osqp_check_termination=1
     )
 
     _init_iter: int = 5
@@ -37,6 +38,7 @@ class DistributedMPC:
     _pred_len: int = 30
     _other_veh_num: int = 3
     _warm_start: bool = True
+    _osqp_check_termination: int = 0
 
     _Q_comfort: np.ndarray = None
     _Qx_big: np.ndarray = None
@@ -64,6 +66,7 @@ class DistributedMPC:
         cls._pred_len = config["pred_len"]
         cls._other_veh_num = config["other_veh_num"]
         cls._warm_start = config["warm_start"]
+        cls._osqp_check_termination = config["osqp_check_termination"]
 
         cls._Qx_big = np.kron(np.eye(cls._pred_len), config["Qx"])
         cls._Qx_big[-4:, -4:] = 10 * config["Qx"]
@@ -213,7 +216,7 @@ class DistributedMPC:
         P, Q, A, l, u = self._get_pqalu(A, B, G, ks, bs)
         # with suppress_stdout_stderr():
         prob = osqp.OSQP()
-        prob.setup(P, Q, A, l, u)
+        prob.setup(P, Q, A, l, u, check_termination=self._osqp_check_termination)
         if self._warm_start:
             prob.warm_start(x=self._u_nominal.reshape(-1), y=self._y_warm)
         result = prob.solve()

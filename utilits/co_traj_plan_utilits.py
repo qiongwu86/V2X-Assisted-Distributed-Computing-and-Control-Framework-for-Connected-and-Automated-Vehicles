@@ -38,15 +38,7 @@ def ProcessTrace(state_dict: dict):
             state_dict[id][9] = (oiof, state_dict[oiof][3])
 
 
-def PickleSave(obj, name: str) -> None:
-    with open(name, 'wb') as f:
-        pickle.dump(obj, f)
 
-
-def PickleRead(nama: str):
-    with open(nama, 'rb') as f:
-        obj = pickle.load(f)
-    return obj
 
 
 def GenerateSpecificTrace(main_num: int, merge_num: int, count: int = 10):
