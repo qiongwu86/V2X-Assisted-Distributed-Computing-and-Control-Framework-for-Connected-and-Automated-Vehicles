@@ -21,7 +21,10 @@ DistributedMPCLIPOPT.initialize(DistributedMPCLIPOPT.default_config)
 # trajs, step_num, traj_info, map_info = multi_cross(_points=8)
 trajs, _, info_round, map_info = cross_traj_double_lane(
     _round=3,
-    _log_file="output_dir/traj_log/cross_double_3_round.npy"
+    _log_file="output_dir/traj_log/cross_double_3_round.npy",
+    _round_distance=10,
+    _init_road_length=15,
+    _over_road_length=50
 )
 # np.save('output_dir/traj_log/cross_double_3_round', info_round)
 for car_id_, traj in enumerate(trajs):
@@ -32,4 +35,5 @@ all_info = DistributedMPCLIPOPT.simulate()
 gen_video_from_info(all_info, trajs, draw_nominal=False, _map_info=map_info)
 nlp_solve_info = NLP_RESULT_INFO.extract_info_from_info_all(all_info)
 PickleSave(nlp_solve_info, "output_dir/solve_info/lnlp_solve_info")
+PickleSave(all_info, "output_dir/solve_info/lnlp_all_info")
 pass

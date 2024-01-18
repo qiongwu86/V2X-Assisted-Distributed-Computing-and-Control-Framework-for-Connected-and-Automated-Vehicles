@@ -6,6 +6,7 @@ from utilits import suppress_stdout_stderr, OSQP_RESULT_INFO
 from typing import Dict, List, Tuple, Callable
 import casadi
 import tqdm
+import time
 
 
 class DistributedMPC:
@@ -212,8 +213,10 @@ class DistributedMPC:
         return self._x_nominal, self._u_nominal
 
     def _inner_optimize(self) -> Tuple:
+        start_time = time.time()
         A, B, G, ks, bs = self._get_all_necessary_for_qp()
         P, Q, A, l, u = self._get_pqalu(A, B, G, ks, bs)
+        end_time = time.time()
         # with suppress_stdout_stderr():
         prob = osqp.OSQP()
         prob.setup(P, Q, A, l, u, check_termination=self._osqp_check_termination)
@@ -224,7 +227,9 @@ class DistributedMPC:
         self._u_nominal = u_opt
         self._x_nominal = KinematicModel.roll_out(self._x_t, u_opt)
         self._y_warm = result.y
-        return OSQP_RESULT_INFO.get_info_from_result(result)
+        osqp_result = list(OSQP_RESULT_INFO.get_info_from_result(result))
+        osqp_result[OSQP_RESULT_INFO.RUN_TIME] += (end_time-start_time)
+        return tuple(osqp_result)
 
     def _step_forward_from_nominal(self):
         u = self._u_nominal[0]

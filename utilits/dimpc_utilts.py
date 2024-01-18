@@ -247,7 +247,7 @@ def cross_traj_double_lane(
         # TODO: speed?
         if init_to == 1:
             # part 1
-            y = np.arange(-_half_road_width - _init_length_round, -_half_road_width, _to_1_speed/10)
+            y = np.arange(-_half_road_width - _init_length_round, -_half_road_width, _to_1_speed / 10)
             x = np.ones_like(y) * _to_axis
             phi = np.ones_like(y) * np.pi * 0.5
             v = _to_1_speed * np.ones_like(y)
@@ -260,7 +260,7 @@ def cross_traj_double_lane(
             v = _to_1_speed * np.ones_like(x)
             traj_part2_1 = np.vstack((x, y, phi, v)).transpose()
             # traj_part2_2
-            x = np.arange(_half_road_width, _half_road_width + _over_length_round, _to_1_speed/10)
+            x = np.arange(_half_road_width, _half_road_width + _over_length_round, _to_1_speed / 10)
             y = -np.ones_like(x) * _to_axis
             phi = np.zeros_like(x)
             v = np.ones_like(x) * _to_1_speed
@@ -286,7 +286,7 @@ def cross_traj_double_lane(
             traj_part2_2 = np.vstack((x, y, phi, v)).transpose()
         elif init_to == 3:
             # part 1
-            y = np.arange(-_half_road_width - _init_length_round, -_half_road_width, _to_3_speed/10)
+            y = np.arange(-_half_road_width - _init_length_round, -_half_road_width, _to_3_speed / 10)
             x = np.ones_like(y) * _to_axis
             phi = np.ones_like(y) * np.pi * 0.5
             v = _to_3_speed * np.ones_like(y)
@@ -482,7 +482,8 @@ def multi_cross(
 
 
 def gen_video_from_info(_all_info: List[Dict], _all_traj: List[np.ndarray], draw_nominal=True,
-                        _map_info: MapInfo = None) -> None:
+                        _map_info: MapInfo = None, save_frame: bool = False,
+                        _custom_lim=None) -> None:
     def _get_nominal(_t: int, veh_id: int, _info: List[Dict]) -> np.ndarray:
         return _info[_t][veh_id]["nominal"][-1][0]  # just x_nominal, so [0]
 
@@ -504,6 +505,7 @@ def gen_video_from_info(_all_info: List[Dict], _all_traj: List[np.ndarray], draw
     fig, ax = plt.subplots()
     if _map_info:
         _map_info.plot_map(ax)
+    text = ax.text(0.85, 0.95, '', transform=ax.transAxes, ha='right')
 
     cars: Dict[int: List[matplotlib.artist.Artist]] = {
         car_id: [
@@ -534,6 +536,10 @@ def gen_video_from_info(_all_info: List[Dict], _all_traj: List[np.ndarray], draw
     y_min = min([np.min(one_traj[:, 1]) for one_traj in _all_traj]) - 5
     y_range_draw = (y_min, y_max)
 
+    if _custom_lim is not None:
+        x_range_draw = _custom_lim[0]
+        y_range_draw = _custom_lim[1]
+
     # ax.add_patch(ref_car)
     def update(frame):
         for car_id, car_obj_list in cars.items():
@@ -552,6 +558,9 @@ def gen_video_from_info(_all_info: List[Dict], _all_traj: List[np.ndarray], draw
             plt.ylim(*y_range_draw)
             ax.set_aspect('equal')
             ax.margins(0)
+            text.set_text("Time: {0:3.0f} ms".format(frame))
+            if save_frame:
+                plt.savefig('output_dir/frames/frame_{}.svg'.format(frame), dpi=300)
         return cars.values()
 
     anim = animation.FuncAnimation(fig, update, frames=len(_all_info), interval=100)
