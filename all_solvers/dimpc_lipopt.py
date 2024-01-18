@@ -1,12 +1,12 @@
 import numpy as np
 from dynamic_models import KinematicModel
 from utilits import suppress_stdout_stderr, NLP_RESULT_INFO
-from typing import Dict, List, Tuple, Callable
+from typing import Dict, List, Tuple
 import casadi as ca
 import tqdm
 
 
-class DistributedMPCIPOPT:
+class DistributedMPCLIPOPT:
 
     _initialized: bool = False
 
@@ -68,6 +68,49 @@ class DistributedMPCIPOPT:
         cls._nlp_solver, cls._lbx, cls._ubx, cls._lbg, cls._ubg = cls._gen_nlp_solver()
 
     @classmethod
+    def _dynamic_constrain(cls):
+        x_t = ca.SX.sym('x_t', 4)
+        u_t = ca.SX.sym('u_t', 2)
+        x_dot = ca.vertcat(
+            x_t[3, 0] * ca.cos(x_t[2, 0] + ca.arctan(0.5 * ca.tan(u_t[1, 0]))),
+            x_t[3, 0] * ca.sin(x_t[2, 0] + ca.arctan(0.5 * ca.tan(u_t[1, 0]))),
+            x_t[3, 0] * ca.sin(ca.arctan(0.5 * ca.tan(u_t[1, 0]))) / (0.5 * KinematicModel.length),
+            u_t[0, 0]
+        )
+        F1 = ca.Function('F1', [x_t, u_t], [KinematicModel.delta_T * x_dot + x_t])
+
+        x0 = ca.MX.sym('x_0', 4)
+        x_current = x0
+        x_list = []
+        u_list = []
+        for i in range(cls._pred_len):
+            u_current = ca.MX.sym('u_' + str(i), 2)
+            x_current_ = F1(x_current, u_current)
+            x_list.append(x_current_)
+            u_list.append(u_current)
+
+            x_current = x_current_
+
+        x_1_T = ca.vertcat(*x_list)
+        u_1_T = ca.vertcat(*u_list)
+        AA_fun = ca.Function(
+            "A_fun",
+            [x0, u_1_T],
+            [ca.jacobian(x_1_T, x0)],
+        )
+        BB_fun = ca.Function(
+            "B_fun",
+            [x0, u_1_T],
+            [ca.jacobian(x_1_T, u_1_T)],
+        )
+        GG_fun = ca.Function(
+            "G_fun",
+            [x0, u_1_T],
+            [x_1_T - ca.jacobian(x_1_T, x0) @ x0 - ca.jacobian(x_1_T, u_1_T) @ u_1_T],
+        )
+        return AA_fun, BB_fun, GG_fun
+
+    @classmethod
     def _gen_nlp_solver(cls):
         delta_T = KinematicModel.delta_T
         _state = ca.SX.sym('state', 4)
@@ -83,6 +126,7 @@ class DistributedMPCIPOPT:
         # param
         x_0 = ca.MX.sym('x_0', 4)
         x_ref = ca.vertcat(*[ca.MX.sym('x_ref_' + str(i + 1), 4) for i in range(cls._pred_len)])
+        u_nominal_ego = ca.vertcat(*[ca.MX.sym('u_ne' + str(i + 1), 2) for i in range(cls._pred_len)])
         x_nominal_other_list = [ca.MX.sym('x_no', cls._pred_len*4) for _ in range(cls._other_veh_num)]
         x_nominal_other = ca.vertcat(*x_nominal_other_list)
 
@@ -91,14 +135,10 @@ class DistributedMPCIPOPT:
         u_0_T_1 = ca.vertcat(*[ca.MX.sym('u_' + str(i), 2) for i in range(cls._pred_len)])
 
         # constrain - g
-        lbg = [0, 0, 0, 0]
-        ubg = [0, 0, 0, 0]
-        g_list = [x_1_T[:4] - _state_next(x_0, u_0_T_1[:2])]
-        for i in range(1, cls._pred_len):
-            g_list.append(x_1_T[i*4: (i+1)*4] - _state_next(x_1_T[(i - 1)*4: i*4], u_0_T_1[i*2: (i+1)*2]))
-            lbg += [0, 0, 0, 0]
-            ubg += [0, 0, 0, 0]
-        g = ca.vertcat(*g_list)
+        A_fun, B_fun, G_fun = cls._dynamic_constrain()
+        g = x_1_T - A_fun(x_0, u_nominal_ego) @ x_0 - B_fun(x_0, u_nominal_ego) @ u_0_T_1 - G_fun(x_0, u_nominal_ego)
+        lbg = [0.0 for _ in range(cls._pred_len * 4)]
+        ubg = [0.0 for _ in range(cls._pred_len * 4)]
 
         # constrain - x
         lbx = [
@@ -127,7 +167,7 @@ class DistributedMPCIPOPT:
             'x': ca.vertcat(u_0_T_1, x_1_T),
             'f': J,
             'g': g,
-            'p': ca.vertcat(x_0, x_ref, x_nominal_other)
+            'p': ca.vertcat(x_0, x_ref, u_nominal_ego, x_nominal_other)
         }
 
         prob_option = dict(
@@ -195,7 +235,7 @@ class DistributedMPCIPOPT:
         return Q_comfort
 
     def __init__(self, init_state: np.ndarray, ref_traj: np.ndarray, mpc_id: int):
-        assert DistributedMPCIPOPT._initialized
+        assert DistributedMPCLIPOPT._initialized
         assert KinematicModel.is_initialized()
 
         self._mpc_id = mpc_id
@@ -248,9 +288,11 @@ class DistributedMPCIPOPT:
         # param: x0, x_ref
         x0 = np.concatenate((self._u_nominal.reshape(-1), self._x_nominal[1:].reshape(-1)))
         x_nominal_other_vec = np.concatenate([a_nominal[1:].reshape(-1) for a_nominal in self._x_nominal_others])
+        u_nominal_ego_vec = self._u_nominal.reshape(-1)
         p = np.concatenate((
             self._x_t,
             self._ref_traj[self._t+1: self._t+1+self._pred_len].reshape(-1),
+            u_nominal_ego_vec,
             x_nominal_other_vec
         ))
         r_ipopt = self._nlp_solver(x0=x0, lbg=self._lbg, ubg=self._ubg, lbx=self._lbx, ubx=self._ubx, p=p)
@@ -309,11 +351,11 @@ class DistributedMPCIPOPT:
         max_step = min([mpc_obj.max_step for mpc_obj in _all_mpc.values()])
         print("max step: {}".format(max_step))
         for _ in tqdm.tqdm(range(max_step)):
-            all_info.append(DistributedMPCIPOPT.step_all())
+            all_info.append(DistributedMPCLIPOPT.step_all())
         return all_info
 
 
-_all_mpc: Dict[int, DistributedMPCIPOPT] = {}
+_all_mpc: Dict[int, DistributedMPCLIPOPT] = {}
 
 if __name__ == "__main__":
     pass

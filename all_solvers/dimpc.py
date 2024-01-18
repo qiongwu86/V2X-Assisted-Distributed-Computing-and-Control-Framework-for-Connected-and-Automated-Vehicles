@@ -211,7 +211,7 @@ class DistributedMPC:
     def get_nominal(self) -> Tuple[np.ndarray, np.ndarray]:
         return self._x_nominal, self._u_nominal
 
-    def _inner_optimize(self) -> List:
+    def _inner_optimize(self) -> Tuple:
         A, B, G, ks, bs = self._get_all_necessary_for_qp()
         P, Q, A, l, u = self._get_pqalu(A, B, G, ks, bs)
         # with suppress_stdout_stderr():

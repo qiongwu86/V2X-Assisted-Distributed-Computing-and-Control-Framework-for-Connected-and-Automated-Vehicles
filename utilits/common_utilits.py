@@ -1,5 +1,5 @@
 import os
-from typing import List, Dict, Text
+from typing import List, Dict, Tuple
 import numpy as np
 import pickle
 
@@ -16,8 +16,8 @@ class OSQP_RESULT_INFO:
     _ITER_TIMES = "iter_times"
 
     @staticmethod
-    def get_info_from_result(res) -> List:
-        return [res.info.run_time, res.info.solve_time, res.info.status, res.info.iter]
+    def get_info_from_result(res) -> Tuple:
+        return tuple((res.info.run_time, res.info.solve_time, res.info.status, res.info.iter))
 
     @staticmethod
     def extract_info_from_info_all(info_all: List) -> Dict[int, Dict[str, np.ndarray]]:
@@ -36,6 +36,33 @@ class OSQP_RESULT_INFO:
                     np.array([res[OSQP_RESULT_INFO.ITER_TIMES] for res in one_time_info[veh_id]["osqp_res"]])
                 ret[veh_id][OSQP_RESULT_INFO._SOLVE_TIME][i, :] = \
                     np.array([res[OSQP_RESULT_INFO.SOLVE_TIME] for res in one_time_info[veh_id]["osqp_res"]])
+        return ret
+
+
+class NLP_RESULT_INFO:
+    RUN_TIME = 0
+    ITER_TIMES = 1
+
+    _RUN_TIME = "run_time"
+    _ITER_TIMES = "iter_times"
+
+    @staticmethod
+    def get_info_from_result(nlp_obj) -> Tuple:
+        return tuple((nlp_obj.stats()["t_wall_total"], nlp_obj.stats()["iter_count"]))
+
+    @staticmethod
+    def extract_info_from_info_all(info_all: List) -> Dict[int, Dict[str, np.ndarray]]:
+        veh_ids = info_all[0].keys()
+        ret = {veh_id: {
+            NLP_RESULT_INFO._RUN_TIME: np.zeros((len(info_all), 1)),
+            NLP_RESULT_INFO._ITER_TIMES: np.zeros((len(info_all), 1)),
+        } for veh_id in veh_ids}
+        for i, one_time_info in enumerate(info_all):
+            for veh_id in veh_ids:
+                ret[veh_id][NLP_RESULT_INFO._RUN_TIME][i, :] = \
+                    one_time_info[veh_id]["nlp_res"][NLP_RESULT_INFO.RUN_TIME]
+                ret[veh_id][NLP_RESULT_INFO._ITER_TIMES][i, :] = \
+                    one_time_info[veh_id]["nlp_res"][NLP_RESULT_INFO.ITER_TIMES]
         return ret
 
 
