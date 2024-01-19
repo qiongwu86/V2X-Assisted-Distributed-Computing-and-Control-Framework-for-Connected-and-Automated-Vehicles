@@ -4,6 +4,7 @@ import numpy as np
 from typing import List, Dict, Text, Tuple
 from matplotlib import patches
 from mpl_toolkits.axes_grid1.inset_locator import mark_inset
+from utilits import dimpc_utilts
 
 PREDICT_LEN = 30
 
@@ -57,7 +58,7 @@ def draw_data(
         _ax.set_ylabel(_y_title)
         _ax.grid(True)
         for _v_id, _v_data in _alg_data.items():
-            _ax.plot(_v_data[name][:, _idx], lw=0.75)
+            _ax.plot(_v_data[name][:, _idx], lw=0.75, color=dimpc_utilts.ColorSet.get_next_color())
         if _rect_dict is not None:
             for _rect in _rect_dict.values():
                 if _alg_name in _rect['alg_name']:
@@ -93,7 +94,7 @@ def draw_data(
                     )
                     _ax.add_patch(rect)
                     for _v_id, _v_data in _alg_data.items():
-                        _ax_in.plot(_v_data[name][:, _idx], lw=0.75)
+                        _ax_in.plot(_v_data[name][:, _idx], lw=0.75, color=dimpc_utilts.ColorSet.get_next_color())
     [_ax.set_position(_sub_fig_pos[i]) for i, _ax in enumerate(axs)]
     axs[-1].set_xlabel(_x_title)
     if _save_name is not None:
@@ -102,11 +103,11 @@ def draw_data(
 
 
 info_dict = {
-    'proposed': PickleRead('output_dir/solve_info/osqp_all_info_3'),
-    'OSQP-CS': PickleRead('output_dir/solve_info/osqp_all_info_cs_3'),
-    'IPOPT': PickleRead('output_dir/solve_info/nlp_all_info_3'),
-    'LD-IPOPT': PickleRead('output_dir/solve_info/lnlp_all_info_3'),
-    'SQP': PickleRead('output_dir/solve_info/lnlp_all_info_3')
+    'proposed': PickleRead('output_dir/solve_info/osqp_all_info_T'),
+    'OSQP-CS': PickleRead('output_dir/solve_info/osqp_all_info_cs_T'),
+    'IPOPT': PickleRead('output_dir/solve_info/nlp_all_info_T'),
+    'LD-IPOPT': PickleRead('output_dir/solve_info/lnlp_all_info_T'),
+    'SQP': PickleRead('output_dir/solve_info/lnlp_all_info_T')
 }
 
 extracted_data_dict = {
@@ -117,87 +118,87 @@ extracted_data_dict = {
     'SQP': extract_data(info_dict['SQP'], _one_nominal=True),
 }
 
-####################################
-# rect_dict = {
-#     '1': {
-#         'pos': (10, -0.25),
-#         'w': 12,
-#         'l': 0.5,
-#         'color': 'r',
-#         'alg_name': ['SQP', 'LD-IPOPT', 'IPOPT', 'proposed', 'OSQP-CS']
-#     },
-#     '2': {
-#         'pos': (70, -0.25),
-#         'w': 20,
-#         'l': 0.75,
-#         'color': 'b',
-#         'alg_name': ['SQP', 'LD-IPOPT', 'IPOPT', 'proposed', 'OSQP-CS']
-#     },
-# }
-# draw_data(extracted_data_dict,
-#           name='control',
-#           _idx=0,
-#           _sub_fig_pos=[[0.09, 0.84, 0.85, 0.14],
-#                         [0.09, 0.65, 0.85, 0.14],
-#                         [0.09, 0.46, 0.85, 0.14],
-#                         [0.09, 0.27, 0.85, 0.14],
-#                         [0.09, 0.08, 0.85, 0.14]],
-#           _y_title='acc[$m/s^2$]',
-#           _x_title='time[ms]',
-#           _y_lim=(-0.5, 1.0),
-#           _x_lim=(-5, 125),
-#           _rect_dict=rect_dict,
-#           _save_name='output_dir/figs/acc.svg'
-#           )
+###################################
+rect_dict = {
+    '1': {
+        'pos': (10, -0.25),
+        'w': 12,
+        'l': 0.5,
+        'color': 'r',
+        'alg_name': ['SQP', 'LD-IPOPT', 'IPOPT', 'proposed', 'OSQP-CS']
+    },
+    '2': {
+        'pos': (70, -0.25),
+        'w': 20,
+        'l': 0.75,
+        'color': 'b',
+        'alg_name': ['SQP', 'LD-IPOPT', 'IPOPT', 'proposed', 'OSQP-CS']
+    },
+}
+draw_data(extracted_data_dict,
+          name='control',
+          _idx=0,
+          _sub_fig_pos=[[0.09, 0.84, 0.85, 0.14],
+                        [0.09, 0.65, 0.85, 0.14],
+                        [0.09, 0.46, 0.85, 0.14],
+                        [0.09, 0.27, 0.85, 0.14],
+                        [0.09, 0.08, 0.85, 0.14]],
+          _y_title='acc[$m/s^2$]',
+          _x_title='time[ms]',
+          _y_lim=(-0.5, 1.0),
+          _x_lim=(-5, 125),
+          _rect_dict=rect_dict,
+          _save_name='output_dir/figs/acc.svg'
+          )
 
-####################################################
-# delta_phi_insert_dict = {
-#     '1': {
-#         'ins_pos': (0.01, 0.15, 0.15, 0.8),
-#         'x_lim': (42, 53),
-#         'y_lim': (-0.05, 0.05),
-#         'alg_name': ['proposed', 'OSQP-CS']
-#     },
-# }
-# rect_dict = {
-#     '1': {
-#         'pos': (10, -0.05),
-#         'w': 12,
-#         'l': 0.1,
-#         'color': 'r',
-#         'alg_name': ['SQP', 'LD-IPOPT', 'IPOPT']
-#     },
-#     '2': {
-#         'pos': (42, -0.05),
-#         'w': 11,
-#         'l': 0.1,
-#         'color': 'b',
-#         'alg_name': ['SQP', 'LD-IPOPT', 'IPOPT']
-#     },
-#     '3': {
-#         'pos': (75, -0.05),
-#         'w': 15,
-#         'l': 0.1,
-#         'color': 'cyan',
-#         'alg_name': ['SQP', 'LD-IPOPT', 'IPOPT']
-#     }
-# }
-# draw_data(extracted_data_dict,
-#           name='delta_phi',
-#           _idx=0,
-#           _sub_fig_pos=[[0.09, 0.84, 0.85, 0.14],
-#                         [0.09, 0.65, 0.85, 0.14],
-#                         [0.09, 0.46, 0.85, 0.14],
-#                         [0.09, 0.27, 0.85, 0.14],
-#                         [0.09, 0.08, 0.85, 0.14]],
-#           _x_lim=(-20, 125),
-#           _y_title=r'$\Delta\phi$[$rad/100ms$]',
-#           _x_title='time[ms]',
-#           _y_lim=(-0.15, 0.15),
-#           _insert_axes=delta_phi_insert_dict,
-#           _rect_dict=rect_dict,
-#           _save_name='output_dir/figs/delta_phi.svg'
-#           )
+###################################################
+delta_phi_insert_dict = {
+    '1': {
+        'ins_pos': (0.01, 0.15, 0.15, 0.8),
+        'x_lim': (42, 53),
+        'y_lim': (-0.05, 0.05),
+        'alg_name': ['proposed', 'OSQP-CS']
+    },
+}
+rect_dict = {
+    '1': {
+        'pos': (10, -0.05),
+        'w': 12,
+        'l': 0.1,
+        'color': 'r',
+        'alg_name': ['SQP', 'LD-IPOPT', 'IPOPT']
+    },
+    '2': {
+        'pos': (42, -0.05),
+        'w': 11,
+        'l': 0.1,
+        'color': 'b',
+        'alg_name': ['SQP', 'LD-IPOPT', 'IPOPT']
+    },
+    '3': {
+        'pos': (75, -0.05),
+        'w': 15,
+        'l': 0.1,
+        'color': 'cyan',
+        'alg_name': ['SQP', 'LD-IPOPT', 'IPOPT']
+    }
+}
+draw_data(extracted_data_dict,
+          name='delta_phi',
+          _idx=0,
+          _sub_fig_pos=[[0.09, 0.84, 0.85, 0.14],
+                        [0.09, 0.65, 0.85, 0.14],
+                        [0.09, 0.46, 0.85, 0.14],
+                        [0.09, 0.27, 0.85, 0.14],
+                        [0.09, 0.08, 0.85, 0.14]],
+          _x_lim=(-20, 125),
+          _y_title=r'$\Delta\phi$[$rad/100ms$]',
+          _x_title='time[ms]',
+          _y_lim=(-0.15, 0.15),
+          _insert_axes=delta_phi_insert_dict,
+          _rect_dict=rect_dict,
+          _save_name='output_dir/figs/delta_phi.svg'
+          )
 
 
 pass

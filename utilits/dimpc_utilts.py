@@ -6,15 +6,18 @@ from dynamic_models import KinematicModel
 
 
 class ColorSet:
-    color_set: List = ['red', 'blue', 'green', 'cyan', 'magenta', 'yellow', 'black', 'orange', 'purple']
+    color_set: List = ["#00008B", "#800000", "#006400", "#4B0082",
+                       "#0000FF", "#FF0000", "#dbdc56", "#9400D3",
+                       "#1E90FF", "#FF4500", "#7CFC00", "#FF00FF"]
     color_ptr: int = 0
 
     @staticmethod
     def get_next_color() -> Text:
-        ColorSet.color_ptr += 1
         if ColorSet.color_ptr == len(ColorSet.color_set):
             ColorSet.color_ptr = 0
-        return ColorSet.color_set[ColorSet.color_ptr]
+        color = ColorSet.color_set[ColorSet.color_ptr]
+        ColorSet.color_ptr += 1
+        return color
 
 
 class MapInfo:
@@ -397,6 +400,110 @@ def cross_traj_double_lane(
         max_step = min(max_step, _max_step)
         all_traj = all_traj + round_traj
         info_rounds[i] = one_round_info
+
+    return all_traj, max_step, info_rounds, _gen_map_info()
+
+
+def cross_traj_T(
+        _speed: float = 5.0,
+        _init_road_length: float = 20.0,
+        _over_road_length: float = 70.0,
+        _road_width: float = 8.0,
+) -> Tuple[List[np.ndarray], int, np.ndarray, MapInfo]:
+    """
+    ____________
+    2          1
+    ____    ____
+        | |
+        |0|
+    0 -> 1
+    1 -> 2
+    2 -> 0
+    """
+    def _rotate_90(one_traj: np.ndarray) -> np.ndarray:
+        new_one_traj = np.zeros_like(one_traj)
+        new_one_traj[:, 0] = -one_traj[:, 1]
+        new_one_traj[:, 1] = one_traj[:, 0]
+        new_one_traj[:, 2] = one_traj[:, 2] + np.pi * 0.5
+        new_one_traj[:, 3] = one_traj[:, 3]
+        return new_one_traj
+
+    def _gen_map_info():
+        _road_length = max(_init_road_length, _over_road_length)
+        _solid: List = [
+            dict(
+                x=np.array([0.5 * _road_width, 0.5 * _road_width]),
+                y=np.array([-0.5 * _road_width - _road_length, -0.5 * _road_width])
+            ),
+            dict(
+                x=np.array([0.5 * _road_width, 0.5 * _road_width + _road_length]),
+                y=np.array([-0.5 * _road_width, -0.5 * _road_width])
+            ),
+            dict(
+                x=np.array([-0.5*_road_width-_road_length, 0.5*_road_width+_road_length]),
+                y=np.array([0.5*_road_width, 0.5*_road_width])
+            ),
+            dict(
+                x=np.array([-0.5 * _road_width, -0.5 * _road_width]),
+                y=np.array([-0.5 * _road_width - _road_length, -0.5 * _road_width])
+            ),
+            dict(
+                x=np.array([-0.5 * _road_width, -0.5 * _road_width - _road_length]),
+                y=np.array([-0.5 * _road_width, -0.5 * _road_width])
+            ),
+        ]
+        _dashed: List = [
+            dict(
+                x=np.array([0.5 * _road_width, 0.5 * _road_width + _road_length]),
+                y=np.array([0, 0])
+            ),
+            dict(
+                x=np.array([-0.5 * _road_width, -0.5 * _road_width - _road_length]),
+                y=np.array([0, 0])
+            ),
+            dict(
+                x=np.array([0, 0]),
+                y=np.array([-0.5*_road_width-_road_length, -0.5*_road_width])
+            ),
+        ]
+        return MapInfo(_solid, _dashed)
+
+    _dist_to_center = 0.5 * (np.sqrt(2) - 1) * _road_width
+    _radius = 0.5 * np.sqrt(2) * _road_width
+    _traj_1_length = 2 * _init_road_length + 0.45 * 2 * np.pi * _radius
+    _traj_2_length = 2 * _init_road_length + _road_width
+    _traj_3_length = 2 * _init_road_length + 0.45 * 2 * np.pi * _radius
+    _traj_2_speed = _speed
+    _traj_1_speed = speed_change(_traj_2_length, _traj_2_speed, _traj_1_length)
+    _traj_3_speed = speed_change(_traj_2_length, _traj_2_speed, _traj_3_length)
+    # traj_1
+    _y = np.arange(-0.5*_road_width - _init_road_length, -0.5*_road_width, _traj_1_speed/10)
+    _x = -np.ones_like(_y) * _dist_to_center
+    _phi = np.ones_like(_y) * 0.5 * np.pi
+    _v = np.ones_like(_y) * _traj_1_speed
+    _traj_1_p1 = np.vstack((_x, _y, _phi, _v))
+    _x = 0.5*_road_width - _radius * np.cos(np.arange(0.0, 0.5*np.pi, _traj_1_speed/10/_radius))
+    _y = -0.5*_road_width + _radius * np.sin(np.arange(0.0, 0.5*np.pi, _traj_1_speed/10/_radius))
+    _phi = 0.5*np.pi - np.arange(0.0, 0.5*np.pi, _traj_1_speed/_radius/10)
+    _v = np.ones_like(_x) * _traj_1_speed
+    _traj_1_p2 = np.vstack((_x, _y, _phi, _v))
+    _x = np.arange(0.5*_road_width, 0.5*_road_width+_over_road_length, _traj_1_speed/10)
+    _y = np.ones_like(_x) * _dist_to_center
+    _phi = np.zeros_like(_x)
+    _v = np.ones_like(_x) * _traj_1_speed
+    _traj_1_p3 = np.vstack((_x, _y, _phi, _v))
+    _traj_1 = np.hstack((_traj_1_p1, _traj_1_p2, _traj_1_p3)).transpose()
+    # traj_2
+    _x = np.arange(0.5*_road_width+_init_road_length, -0.5*_road_width-_over_road_length, -1.15*_traj_2_speed/10)
+    _y = -np.ones_like(_x) * _dist_to_center
+    _phi = np.ones_like(_x) * np.pi
+    _v = np.ones_like(_x) * _traj_2_speed * 1.15
+    _traj_2 = np.vstack((_x, _y, _phi, _v)).transpose()
+    _traj_3 = _rotate_90(_rotate_90(_rotate_90(_traj_1)))
+
+    all_traj = [_traj_1, _traj_2, _traj_3]
+    max_step = max([_traj.shape[0] for _traj in all_traj])
+    info_rounds = np.array([0])
 
     return all_traj, max_step, info_rounds, _gen_map_info()
 
