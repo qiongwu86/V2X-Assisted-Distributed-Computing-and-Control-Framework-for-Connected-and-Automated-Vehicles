@@ -10,6 +10,7 @@ mpc_config['safe_th'] = 1.7
 mpc_config['pred_len'] = 30
 mpc_config['other_veh_num'] = 4
 mpc_config['comfort'] = 1.5
+mpc_config['Qu'] = 0.5 * np.diag([1.0, 0.1])
 
 KinematicModel.initialize(KinematicModel.default_config)
 DistributedMPCIPOPT.initialize(DistributedMPCIPOPT.default_config)
@@ -22,9 +23,9 @@ DistributedMPCIPOPT.initialize(DistributedMPCIPOPT.default_config)
 trajs, _, info_round, map_info = cross_traj_double_lane(
     _round=3,
     _log_file="output_dir/traj_log/cross_double_3_round.npy",
-    _round_distance=10,
+    _round_distance=15,
     _init_road_length=15,
-    _over_road_length=50
+    _over_road_length=60
 
 )
 # np.save('output_dir/traj_log/cross_double_3_round', info_round)
@@ -33,8 +34,10 @@ for car_id_, traj in enumerate(trajs):
 
 all_info = DistributedMPCIPOPT.simulate()
 
-gen_video_from_info(all_info, trajs, draw_nominal=False, _map_info=map_info)
+# gen_video_from_info(all_info, trajs, draw_nominal=False, _map_info=map_info,
+#                     _custom_lim=((-45, 45), (-45, 45))
+#                     )
 nlp_solve_info = NLP_RESULT_INFO.extract_info_from_info_all(all_info)
-PickleSave(nlp_solve_info, "output_dir/solve_info/nlp_solve_info")
-PickleSave(all_info, "output_dir/solve_info/nlp_all_info")
+PickleSave(nlp_solve_info, "output_dir/solve_info/nlp_solve_info_3")
+PickleSave(all_info, "output_dir/solve_info/nlp_all_info_3")
 pass

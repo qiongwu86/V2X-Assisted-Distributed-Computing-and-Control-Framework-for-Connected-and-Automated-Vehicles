@@ -1,141 +1,203 @@
 import matplotlib.pyplot as plt
 from utilits import *
 import numpy as np
-import matplotlib as mpl
-from typing import Tuple, Dict
+from typing import List, Dict, Text, Tuple
+from matplotlib import patches
+from mpl_toolkits.axes_grid1.inset_locator import mark_inset
+
+PREDICT_LEN = 30
 
 
-def extract_data(_all_info) -> Dict:
-    _new_data = {v_id: dict() for v_id in _all_info.keys()}
-    for v_id, _data in _all_info.items():
-        _new_data[v_id]['run_time'] = np.sum(_data['run_time'], axis=1)
-        _new_data[v_id]['iter_times'] = np.sum(_data['iter_times'], axis=1)
+def extract_data(_all_info: Dict, _data_name: Text = '', _one_nominal: bool = False) -> Dict:
+    _data_num = len(_all_info)
+    assert _data_num > 0
+    _veh_ids = [_v_id for _v_id in _all_info[0].keys()]
+    _ret_dict = {
+        _veh_id: dict(
+            state=np.zeros((_data_num, 4)),
+            control=np.zeros((_data_num, 2)),
+            x_nominal=np.zeros((_data_num, PREDICT_LEN + 1, 4)),
+            u_nominal=np.zeros((_data_num, PREDICT_LEN, 2))
+        ) for _veh_id in _veh_ids
+    }
+    for _t, one_time_data in enumerate(_all_info):
+        for _v_id in _veh_ids:
+            _ret_dict[_v_id]['state'][_t] = one_time_data[_v_id]['new_state']
+            _ret_dict[_v_id]['control'][_t] = one_time_data[_v_id]['control']
+            if _one_nominal:
+                _ret_dict[_v_id]['x_nominal'][_t] = one_time_data[_v_id]['nominal'][0]
+                _ret_dict[_v_id]['u_nominal'][_t] = one_time_data[_v_id]['nominal'][1]
+            else:
+                _ret_dict[_v_id]['x_nominal'][_t] = one_time_data[_v_id]['nominal'][-1][0]
+                _ret_dict[_v_id]['u_nominal'][_t] = one_time_data[_v_id]['nominal'][-1][1]
+    for _v_id, _v_data in _ret_dict.items():
+        _v_data['delta_phi'] = np.array([_v_data['state'][1:, 2] - _v_data['state'][:-1, 2]]).transpose()
+    return _ret_dict
 
-    _run_time_mat = np.vstack([
-        _new_data[v_id]['run_time'] for v_id in _new_data.keys()
-    ])
-    _iter_times_mat = np.vstack([
-        _new_data[v_id]['iter_times'] for v_id in _new_data.keys()
-    ])
-    return dict(run_time=_run_time_mat, iter_times=_iter_times_mat)
+
+def draw_data(
+        _extracted_data: Dict,
+        name: Text,
+        _idx: int,
+        _sub_fig_pos: List,
+        _y_title: Text,
+        _x_title: Text,
+        _y_lim: Tuple,
+        _x_lim: Tuple,
+        _insert_axes=None,
+        _rect_dict=None,
+        _save_name=None
+):
+    fig, axs = plt.subplots(len(_extracted_data), 1, figsize=(8, 1.5 * len(_extracted_data)))
+    for _ax, _alg_name in zip(axs, _extracted_data):
+        _alg_data = _extracted_data[_alg_name]
+        _ax.set_title(_alg_name, fontsize=10, fontweight=1, rotation='vertical', x=1.02, y=0.4, va='center')
+        _ax.set_ylim(*_y_lim)
+        _ax.set_xlim(*_x_lim)
+        _ax.set_ylabel(_y_title)
+        _ax.grid(True)
+        for _v_id, _v_data in _alg_data.items():
+            _ax.plot(_v_data[name][:, _idx], lw=0.75)
+        if _rect_dict is not None:
+            for _rect in _rect_dict.values():
+                if _alg_name in _rect['alg_name']:
+                    rect = patches.Rectangle(
+                        (_rect['pos'][0], _rect['pos'][1]),
+                        _rect['w'],
+                        _rect['l'],
+                        fill=False,
+                        edgecolor=_rect['color'],
+                        lw=1.5,
+                        alpha=0.8
+                    )
+                    _ax.add_patch(rect)
+
+        if _insert_axes is not None:
+            for _ins_data in _insert_axes.values():
+                if _alg_name in _ins_data['alg_name']:
+                    _ax_in = _ax.inset_axes(_ins_data['ins_pos'])
+                    _ax_in.set_xticks([])
+                    _ax_in.set_yticks([])
+                    _ax_in.set_xlim(_ins_data['x_lim'])
+                    _ax_in.set_ylim(_ins_data['y_lim'])
+                    _ax_in.spines[:].set_color('b')
+                    # mark_inset(_ax, _ax_in, loc1=3, loc2=2, fc="none", ec='r', lw=1)
+                    rect = patches.Rectangle(
+                        (_ins_data['x_lim'][0], _ins_data['y_lim'][0]),
+                        _ins_data['x_lim'][1]-_ins_data['x_lim'][0],
+                        _ins_data['y_lim'][1]-_ins_data['y_lim'][0],
+                        fill=False,
+                        edgecolor='b',
+                        lw=1,
+                        alpha=0.8
+                    )
+                    _ax.add_patch(rect)
+                    for _v_id, _v_data in _alg_data.items():
+                        _ax_in.plot(_v_data[name][:, _idx], lw=0.75)
+    [_ax.set_position(_sub_fig_pos[i]) for i, _ax in enumerate(axs)]
+    axs[-1].set_xlabel(_x_title)
+    if _save_name is not None:
+        plt.savefig(_save_name)
+    plt.show()
 
 
-##########################################
 info_dict = {
-    'proposed': PickleRead('output_dir/solve_info/osqp_solve_info'),
-    'OSQP-CS': PickleRead('output_dir/solve_info/osqp_solve_info_cs'),
-    # 'IPOPT': PickleRead('output_dir/solve_info/nlp_solve_info'),
-    # 'LD-IPOPT': PickleRead('output_dir/solve_info/lnlp_solve_info')
+    'proposed': PickleRead('output_dir/solve_info/osqp_all_info_3'),
+    'OSQP-CS': PickleRead('output_dir/solve_info/osqp_all_info_cs_3'),
+    'IPOPT': PickleRead('output_dir/solve_info/nlp_all_info_3'),
+    'LD-IPOPT': PickleRead('output_dir/solve_info/lnlp_all_info_3'),
+    'SQP': PickleRead('output_dir/solve_info/lnlp_all_info_3')
 }
 
-data_for_draw = {
-    title: extract_data(origin_data) for title, origin_data in info_dict.items()
-}
-run_time_max = max([np.max(data['run_time']) for data in data_for_draw.values()])
-run_time_min = min([np.min(data['run_time']) for data in data_for_draw.values()])
-print(run_time_min, run_time_max)
-
-# # fig = plt.figure()
-fig, axs = plt.subplots(len(info_dict)+1, 1, figsize=(8, 3))
-[
-    _ax.imshow(data_for_draw[_alg_name]['run_time'], cmap='plasma', vmin=run_time_min, vmax=run_time_max)
-    for _alg_name, _ax in zip(data_for_draw, axs)
-]
-[
-    _ax.set_title(_alg_name)
-    for _alg_name, _ax in zip(data_for_draw, axs)
-]
-fig.colorbar(mpl.cm.ScalarMappable(norm=mpl.colors.Normalize(1000*run_time_min, 1000*run_time_max), cmap='plasma'),
-             cax=axs[-1], orientation='vertical', label='run time[ms]')
-
-axs[0].set_position([0.05, 0.08, 0.75, 0.3])
-axs[1].set_position([0.05, 0.5, 0.75, 0.3])
-axs[-1].set_position([0.85, 0.08, 0.05, 0.7])
-plt.savefig('output_dir/figs/run_time_01.svg')
-plt.show()
-plt.close()
-
-iter_times_max = max([np.max(data['iter_times']) for data in data_for_draw.values()])
-iter_times_min = min([np.min(data['iter_times']) for data in data_for_draw.values()])
-print(iter_times_max, iter_times_min)
-
-# # fig = plt.figure()
-fig, axs = plt.subplots(len(info_dict)+1, 1, figsize=(8, 3))
-[
-    _ax.imshow(data_for_draw[_alg_name]['iter_times'], cmap='plasma', vmin=iter_times_min, vmax=iter_times_max)
-    for _alg_name, _ax in zip(data_for_draw, axs)
-]
-[
-    _ax.set_title(_alg_name)
-    for _alg_name, _ax in zip(data_for_draw, axs)
-]
-fig.colorbar(mpl.cm.ScalarMappable(norm=mpl.colors.Normalize(iter_times_min, iter_times_max), cmap='plasma'),
-             cax=axs[-1], orientation='vertical', label='iter times')
-
-axs[0].set_position([0.05, 0.08, 0.75, 0.3])
-axs[1].set_position([0.05, 0.5, 0.75, 0.3])
-axs[-1].set_position([0.85, 0.08, 0.05, 0.7])
-plt.savefig('output_dir/figs/iter_times_01.svg')
-plt.show()
-plt.close()
-
-
-##########################################
-info_dict = {
-    # proposed=PickleRead('output_dir/solve_info/osqp_solve_info'),
-    # osqp_cs=PickleRead('output_dir/solve_info/osqp_solve_info_cs'),
-    'IPOPT': PickleRead('output_dir/solve_info/nlp_solve_info'),
-    'LD-IPOPT': PickleRead('output_dir/solve_info/lnlp_solve_info')
-}
-data_for_draw = {
-    title: extract_data(origin_data) for title, origin_data in info_dict.items()
+extracted_data_dict = {
+    'proposed': extract_data(info_dict['proposed']),
+    'OSQP-CS': extract_data(info_dict['OSQP-CS']),
+    'LD-IPOPT': extract_data(info_dict['LD-IPOPT'], _one_nominal=True),
+    'IPOPT': extract_data(info_dict['IPOPT'], _one_nominal=True),
+    'SQP': extract_data(info_dict['SQP'], _one_nominal=True),
 }
 
-run_time_max = max([np.max(data['run_time']) for data in data_for_draw.values()])
-run_time_min = min([np.min(data['run_time']) for data in data_for_draw.values()])
-print(run_time_min, run_time_max)
+####################################
+# rect_dict = {
+#     '1': {
+#         'pos': (10, -0.25),
+#         'w': 12,
+#         'l': 0.5,
+#         'color': 'r',
+#         'alg_name': ['SQP', 'LD-IPOPT', 'IPOPT', 'proposed', 'OSQP-CS']
+#     },
+#     '2': {
+#         'pos': (70, -0.25),
+#         'w': 20,
+#         'l': 0.75,
+#         'color': 'b',
+#         'alg_name': ['SQP', 'LD-IPOPT', 'IPOPT', 'proposed', 'OSQP-CS']
+#     },
+# }
+# draw_data(extracted_data_dict,
+#           name='control',
+#           _idx=0,
+#           _sub_fig_pos=[[0.09, 0.84, 0.85, 0.14],
+#                         [0.09, 0.65, 0.85, 0.14],
+#                         [0.09, 0.46, 0.85, 0.14],
+#                         [0.09, 0.27, 0.85, 0.14],
+#                         [0.09, 0.08, 0.85, 0.14]],
+#           _y_title='acc[$m/s^2$]',
+#           _x_title='time[ms]',
+#           _y_lim=(-0.5, 1.0),
+#           _x_lim=(-5, 125),
+#           _rect_dict=rect_dict,
+#           _save_name='output_dir/figs/acc.svg'
+#           )
 
-# # fig = plt.figure()
-fig, axs = plt.subplots(len(info_dict)+1, 1, figsize=(8, 3))
-[
-    _ax.imshow(data_for_draw[_alg_name]['run_time'], cmap='plasma', vmin=run_time_min, vmax=run_time_max)
-    for _alg_name, _ax in zip(data_for_draw, axs)
-]
-[
-    _ax.set_title(_alg_name)
-    for _alg_name, _ax in zip(data_for_draw, axs)
-]
-fig.colorbar(mpl.cm.ScalarMappable(norm=mpl.colors.Normalize(1000*run_time_min, 1000*run_time_max), cmap='plasma'),
-             cax=axs[-1], orientation='vertical', label='run time[ms]')
+####################################################
+# delta_phi_insert_dict = {
+#     '1': {
+#         'ins_pos': (0.01, 0.15, 0.15, 0.8),
+#         'x_lim': (42, 53),
+#         'y_lim': (-0.05, 0.05),
+#         'alg_name': ['proposed', 'OSQP-CS']
+#     },
+# }
+# rect_dict = {
+#     '1': {
+#         'pos': (10, -0.05),
+#         'w': 12,
+#         'l': 0.1,
+#         'color': 'r',
+#         'alg_name': ['SQP', 'LD-IPOPT', 'IPOPT']
+#     },
+#     '2': {
+#         'pos': (42, -0.05),
+#         'w': 11,
+#         'l': 0.1,
+#         'color': 'b',
+#         'alg_name': ['SQP', 'LD-IPOPT', 'IPOPT']
+#     },
+#     '3': {
+#         'pos': (75, -0.05),
+#         'w': 15,
+#         'l': 0.1,
+#         'color': 'cyan',
+#         'alg_name': ['SQP', 'LD-IPOPT', 'IPOPT']
+#     }
+# }
+# draw_data(extracted_data_dict,
+#           name='delta_phi',
+#           _idx=0,
+#           _sub_fig_pos=[[0.09, 0.84, 0.85, 0.14],
+#                         [0.09, 0.65, 0.85, 0.14],
+#                         [0.09, 0.46, 0.85, 0.14],
+#                         [0.09, 0.27, 0.85, 0.14],
+#                         [0.09, 0.08, 0.85, 0.14]],
+#           _x_lim=(-20, 125),
+#           _y_title=r'$\Delta\phi$[$rad/100ms$]',
+#           _x_title='time[ms]',
+#           _y_lim=(-0.15, 0.15),
+#           _insert_axes=delta_phi_insert_dict,
+#           _rect_dict=rect_dict,
+#           _save_name='output_dir/figs/delta_phi.svg'
+#           )
 
-axs[0].set_position([0.05, 0.08, 0.75, 0.3])
-axs[1].set_position([0.05, 0.5, 0.75, 0.3])
-axs[-1].set_position([0.85, 0.08, 0.05, 0.7])
-plt.savefig('output_dir/figs/run_time_02.svg')
-plt.show()
-plt.close()
 
-iter_times_max = max([np.max(data['iter_times']) for data in data_for_draw.values()])
-iter_times_min = min([np.min(data['iter_times']) for data in data_for_draw.values()])
-print(iter_times_max, iter_times_min)
-
-# # fig = plt.figure()
-fig, axs = plt.subplots(len(info_dict)+1, 1, figsize=(8, 3))
-[
-    _ax.imshow(data_for_draw[_alg_name]['iter_times'], cmap='plasma', vmin=iter_times_min, vmax=iter_times_max)
-    for _alg_name, _ax in zip(data_for_draw, axs)
-]
-[
-    _ax.set_title(_alg_name)
-    for _alg_name, _ax in zip(data_for_draw, axs)
-]
-fig.colorbar(mpl.cm.ScalarMappable(norm=mpl.colors.Normalize(iter_times_min, iter_times_max), cmap='plasma'),
-             cax=axs[-1], orientation='vertical', label='iter times')
-
-axs[0].set_position([0.05, 0.08, 0.75, 0.3])
-axs[1].set_position([0.05, 0.5, 0.75, 0.3])
-axs[-1].set_position([0.85, 0.08, 0.05, 0.7])
-plt.savefig('output_dir/figs/iter_times_02.svg')
-plt.show()
-plt.close()
-
+pass
