@@ -4,14 +4,14 @@ from utilits import *
 import numpy as np
 
 mpc_config = DistributedMPC.default_config
-mpc_config['run_iter'] = 8
-mpc_config['safe_factor'] = 3.0
-mpc_config['safe_th'] = 1.6
+mpc_config['run_iter'] = 5
+mpc_config['safe_factor'] = 3.5
+mpc_config['safe_th'] = 1.8
 mpc_config['pred_len'] = 30
-mpc_config['other_veh_num'] = 4
+mpc_config['other_veh_num'] = 6
 mpc_config['comfort'] = 1.5
-mpc_config['warm_start'] = False
-mpc_config['Qu'] = 0.5 * np.diag([1.0, 0.5])
+mpc_config['warm_start'] = True
+mpc_config['Qu'] = 0.3 * np.diag([1.0, 0.5])
 
 KinematicModel.initialize(KinematicModel.default_config)
 DistributedMPC.initialize(DistributedMPC.default_config)
@@ -31,10 +31,10 @@ for car_id_, traj in enumerate(trajs):
 
 all_info = DistributedMPC.simulate()
 
-gen_video_from_info(all_info, trajs, draw_nominal=False, _map_info=map_info, save_frame=False,
-#                     # _custom_lim=((-40, 40), (-40, 40))
+gen_video_from_info(all_info, trajs, draw_nominal=True, _map_info=map_info, save_frame=True,
+                    _custom_lim=((-20, 20), (-20, 5))
                     )
 osqp_solve_info = OSQP_RESULT_INFO.extract_info_from_info_all(all_info)
-PickleSave(osqp_solve_info, "output_dir/solve_info/osqp_solve_info_cs_T")
-PickleSave(all_info, "output_dir/solve_info/osqp_all_info_cs_T")
+PickleSave(osqp_solve_info, "output_dir/solve_info/osqp_solve_info_T")
+PickleSave(all_info, "output_dir/solve_info/osqp_all_info_T")
 # pass

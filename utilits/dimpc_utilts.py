@@ -614,25 +614,31 @@ def gen_video_from_info(_all_info: List[Dict], _all_traj: List[np.ndarray], draw
         _map_info.plot_map(ax)
     text = ax.text(0.85, 0.95, '', transform=ax.transAxes, ha='right')
 
-    cars: Dict[int: List[matplotlib.artist.Artist]] = {
-        car_id: [
-            patches.Rectangle(
+    cars: Dict[int: List[matplotlib.artist.Artist]] = {}
+    for _car_id in _all_info[0].keys():
+        _car_info = []
+        _car_color = ColorSet.get_next_color()
+        rect = patches.Rectangle(
                 (0, 0),
                 KinematicModel.length,
                 KinematicModel.width,
                 fill=True,
-                facecolor=ColorSet.get_next_color(),
+                facecolor=_car_color,
                 edgecolor=None
-            ),
-            ax.plot(
-                _get_nominal(0, car_id, _all_info)[:, 0],
-                _get_nominal(0, car_id, _all_info)[:, 1],
-                color="red",
-                linewidth=0.25
-            )[0] if draw_nominal else None
-        ]
-        for car_id in _all_info[0].keys()
-    }
+            )
+        _car_info.append(rect)
+        if draw_nominal:
+            _car_info.append(
+                ax.plot(
+                    _get_nominal(0, _car_id, _all_info)[:, 0],
+                    _get_nominal(0, _car_id, _all_info)[:, 1],
+                    color="red",
+                    linewidth=0.25
+                )[0])
+        else:
+            _car_info.append(None)
+        _car_info.append(_car_color)
+        cars[_car_id] = _car_info
     [ax.add_patch(car_obj_list[0]) for car_obj_list in cars.values()]
 
     # draw_range
@@ -650,9 +656,10 @@ def gen_video_from_info(_all_info: List[Dict], _all_traj: List[np.ndarray], draw
     # ax.add_patch(ref_car)
     def update(frame):
         for car_id, car_obj_list in cars.items():
-            car_rect, car_nominal = car_obj_list
+            car_rect, car_nominal, car_color = car_obj_list
 
             _state = _get_state(frame, car_id, _all_info)
+            plt.scatter(_state[0], _state[1], color=car_color, s=0.1)
             car_rect.set_xy(pos_fun(_state))
             car_rect.set_angle(np.rad2deg(_state[2]))
 

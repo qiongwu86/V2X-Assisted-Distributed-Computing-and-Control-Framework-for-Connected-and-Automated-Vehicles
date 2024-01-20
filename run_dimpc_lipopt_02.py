@@ -4,14 +4,15 @@ from utilits import *
 import numpy as np
 
 mpc_config = DistributedMPCLIPOPT.default_config
-mpc_config['run_iter'] = 8
-mpc_config['safe_factor'] = 3.0
-mpc_config['safe_th'] = 1.6
+mpc_config['run_iter'] = 5
+mpc_config['safe_factor'] = 3.5
+mpc_config['safe_th'] = 1.8
 mpc_config['pred_len'] = 30
 mpc_config['other_veh_num'] = 2
 mpc_config['comfort'] = 1.5
-mpc_config['kernel'] = 'sqpmethod'
-mpc_config['Qu'] = 0.5 * np.diag([1.0, 0.5])
+mpc_config['warm_start'] = True
+mpc_config['Qu'] = 0.3 * np.diag([1.0, 0.5])
+mpc_config['kernel'] = 'ipopt'
 
 KinematicModel.initialize(KinematicModel.default_config)
 DistributedMPCLIPOPT.initialize(DistributedMPCLIPOPT.default_config)
@@ -36,6 +37,6 @@ all_info = DistributedMPCLIPOPT.simulate()
 #                     _custom_lim=((-45, 45), (-45, 45))
 #                     )
 nlp_solve_info = NLP_RESULT_INFO.extract_info_from_info_all(all_info)
-PickleSave(nlp_solve_info, "output_dir/solve_info/sqp_solve_info_T")
-PickleSave(all_info, "output_dir/solve_info/sqp_all_info_T")
+PickleSave(nlp_solve_info, "output_dir/solve_info/lnlp_solve_info_T")
+PickleSave(all_info, "output_dir/solve_info/lnlp_all_info_T")
 pass

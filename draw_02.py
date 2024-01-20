@@ -75,8 +75,8 @@ draw_one_svg(
 
 ##########################################
 info_dict = {
-    'proposed': PickleRead('output_dir/solve_info/osqp_solve_info_2'),
-    'OSQP-CS': PickleRead('output_dir/solve_info/osqp_solve_info_cs_2'),
+    'proposed': PickleRead('output_dir/solve_info/osqp_solve_info_T'),
+    'OSQP-CS': PickleRead('output_dir/solve_info/osqp_solve_info_cs_T'),
     # 'IPOPT': PickleRead('output_dir/solve_info/nlp_solve_info'),
     # 'LD-IPOPT': PickleRead('output_dir/solve_info/lnlp_solve_info')
 }
@@ -108,9 +108,9 @@ draw_one_svg(
 info_dict = {
     # proposed=PickleRead('output_dir/solve_info/osqp_solve_info'),
     # osqp_cs=PickleRead('output_dir/solve_info/osqp_solve_info_cs'),
-    'IPOPT': PickleRead('output_dir/solve_info/nlp_solve_info_2'),
-    'LD-IPOPT': PickleRead('output_dir/solve_info/lnlp_solve_info_2'),
-    'SQP': PickleRead('output_dir/solve_info/sqp_solve_info_2'),
+    'IPOPT': PickleRead('output_dir/solve_info/nlp_solve_info_T'),
+    'LD-IPOPT': PickleRead('output_dir/solve_info/lnlp_solve_info_T'),
+    'SQP': PickleRead('output_dir/solve_info/sqp_solve_info_T'),
 }
 draw_one_svg(
     _data_for_draw=info_dict,

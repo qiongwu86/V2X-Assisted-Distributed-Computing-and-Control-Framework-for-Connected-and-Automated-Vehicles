@@ -68,7 +68,7 @@ def draw_data(
                         _rect['l'],
                         fill=False,
                         edgecolor=_rect['color'],
-                        lw=1.5,
+                        lw=2.5,
                         alpha=0.8
                     )
                     _ax.add_patch(rect)
@@ -81,8 +81,8 @@ def draw_data(
                     _ax_in.set_yticks([])
                     _ax_in.set_xlim(_ins_data['x_lim'])
                     _ax_in.set_ylim(_ins_data['y_lim'])
-                    _ax_in.spines[:].set_color('b')
-                    # mark_inset(_ax, _ax_in, loc1=3, loc2=2, fc="none", ec='r', lw=1)
+                    _ax_in.spines[:].set_color('k')
+                    mark_inset(_ax, _ax_in, loc1=4, loc2=1, fc="none", ec='k', lw=1)
                     rect = patches.Rectangle(
                         (_ins_data['x_lim'][0], _ins_data['y_lim'][0]),
                         _ins_data['x_lim'][1]-_ins_data['x_lim'][0],
@@ -121,18 +121,33 @@ extracted_data_dict = {
 ###################################
 rect_dict = {
     '1': {
-        'pos': (10, -0.25),
-        'w': 12,
-        'l': 0.5,
+        'pos': (62, -0.45),
+        'w': 16,
+        'l': 0.6,
         'color': 'r',
         'alg_name': ['SQP', 'LD-IPOPT', 'IPOPT', 'proposed', 'OSQP-CS']
     },
     '2': {
-        'pos': (70, -0.25),
-        'w': 20,
-        'l': 0.75,
+        'pos': (42, -0.25),
+        'w': 16,
+        'l': 0.5,
         'color': 'b',
         'alg_name': ['SQP', 'LD-IPOPT', 'IPOPT', 'proposed', 'OSQP-CS']
+    },
+    '3': {
+        'pos': (1, -0.2),
+        'w': 10,
+        'l': 0.5,
+        'color': 'cyan',
+        'alg_name': ['SQP', 'LD-IPOPT', 'IPOPT', 'proposed', 'OSQP-CS']
+    },
+}
+delta_phi_insert_dict = {
+    '1': {
+        'ins_pos': (0.01, 0.1, 0.10, 0.85),
+        'x_lim': (15, 25),
+        'y_lim': (-0.25, 0.25),
+        'alg_name': ['proposed', 'OSQP-CS']
     },
 }
 draw_data(extracted_data_dict,
@@ -145,43 +160,44 @@ draw_data(extracted_data_dict,
                         [0.09, 0.08, 0.85, 0.14]],
           _y_title='acc[$m/s^2$]',
           _x_title='time[ms]',
-          _y_lim=(-0.5, 1.0),
-          _x_lim=(-5, 125),
+          _y_lim=(-0.5, 0.5),
+          _x_lim=(-20, 110),
           _rect_dict=rect_dict,
-          _save_name='output_dir/figs/acc.svg'
+          _save_name='output_dir/figs/acc.svg',
+          _insert_axes=delta_phi_insert_dict
           )
 
 ###################################################
 delta_phi_insert_dict = {
     '1': {
-        'ins_pos': (0.01, 0.15, 0.15, 0.8),
-        'x_lim': (42, 53),
-        'y_lim': (-0.05, 0.05),
-        'alg_name': ['proposed', 'OSQP-CS']
+        'ins_pos': (0.01, 0.05, 0.15, 0.9),
+        'x_lim': (41, 52),
+        'y_lim': (-0.07, 0.03),
+        'alg_name': ['proposed', 'OSQP-CS', 'SQP', 'LD-IPOPT', 'IPOPT']
     },
 }
 rect_dict = {
-    '1': {
-        'pos': (10, -0.05),
-        'w': 12,
-        'l': 0.1,
-        'color': 'r',
-        'alg_name': ['SQP', 'LD-IPOPT', 'IPOPT']
-    },
-    '2': {
-        'pos': (42, -0.05),
-        'w': 11,
-        'l': 0.1,
-        'color': 'b',
-        'alg_name': ['SQP', 'LD-IPOPT', 'IPOPT']
-    },
-    '3': {
-        'pos': (75, -0.05),
-        'w': 15,
-        'l': 0.1,
-        'color': 'cyan',
-        'alg_name': ['SQP', 'LD-IPOPT', 'IPOPT']
-    }
+    # '1': {
+    #     'pos': (10, -0.05),
+    #     'w': 12,
+    #     'l': 0.1,
+    #     'color': 'r',
+    #     'alg_name': ['SQP', 'LD-IPOPT', 'IPOPT']
+    # },
+    # '2': {
+    #     'pos': (42, -0.05),
+    #     'w': 11,
+    #     'l': 0.1,
+    #     'color': 'b',
+    #     'alg_name': ['SQP', 'LD-IPOPT', 'IPOPT']
+    # },
+    # '3': {
+    #     'pos': (75, -0.05),
+    #     'w': 15,
+    #     'l': 0.1,
+    #     'color': 'cyan',
+    #     'alg_name': ['SQP', 'LD-IPOPT', 'IPOPT']
+    # }
 }
 draw_data(extracted_data_dict,
           name='delta_phi',
@@ -191,7 +207,7 @@ draw_data(extracted_data_dict,
                         [0.09, 0.46, 0.85, 0.14],
                         [0.09, 0.27, 0.85, 0.14],
                         [0.09, 0.08, 0.85, 0.14]],
-          _x_lim=(-20, 125),
+          _x_lim=(-20, 110),
           _y_title=r'$\Delta\phi$[$rad/100ms$]',
           _x_title='time[ms]',
           _y_lim=(-0.15, 0.15),

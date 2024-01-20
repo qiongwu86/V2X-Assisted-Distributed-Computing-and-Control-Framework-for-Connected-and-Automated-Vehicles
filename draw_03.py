@@ -28,21 +28,22 @@ def calculate_min_dist(_data_for_calculate: Dict) -> Dict[Text, np.ndarray]:
 
 
 info_dict = {
-    'proposed': PickleRead('output_dir/solve_info/osqp_all_info_3'),
-    # 'OSQP-CS': PickleRead('output_dir/solve_info/osqp_all_info_cs_3'),
-    # 'IPOPT': PickleRead('output_dir/solve_info/nlp_all_info_3'),
-    # 'LD-IPOPT': PickleRead('output_dir/solve_info/lnlp_all_info_3'),
-    # 'SQP': PickleRead('output_dir/solve_info/lnlp_all_info_3')
+    'proposed': PickleRead('output_dir/solve_info/osqp_all_info_T'),
+    'OSQP-CS': PickleRead('output_dir/solve_info/osqp_all_info_cs_T'),
+    'IPOPT': PickleRead('output_dir/solve_info/nlp_all_info_T'),
+    'LD-IPOPT': PickleRead('output_dir/solve_info/lnlp_all_info_T'),
+    'SQP': PickleRead('output_dir/solve_info/sqp_all_info_T')
 }
 
 a = calculate_min_dist(info_dict)
-[plt.plot(_alg_dist) for _alg_name, _alg_dist in a.items()]
+[plt.plot([_ for _ in range(_alg_dist.shape[0])], _alg_dist, label=_alg_name) for _alg_name, _alg_dist in a.items()]
+plt.legend()
 
 _min_dist = min([np.min(dist) for dist in a.values()])
 _min_dist_t = min([np.argmin(dist) for dist in a.values()])
 print(_min_dist_t)
-plt.plot([0, 120], [_min_dist, _min_dist])
-plt.scatter(float(_min_dist_t), _min_dist, color='r')
+# plt.plot([0, 120], [_min_dist, _min_dist])
+# plt.scatter(float(_min_dist_t), _min_dist, color='r')
 plt.grid()
 plt.show()
 
