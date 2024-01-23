@@ -103,11 +103,11 @@ def draw_data(
 
 
 info_dict = {
-    'proposed': PickleRead('output_dir/solve_info/osqp_all_info_T'),
-    'OSQP-CS': PickleRead('output_dir/solve_info/osqp_all_info_cs_T'),
-    'IPOPT': PickleRead('output_dir/solve_info/nlp_all_info_T'),
-    'LD-IPOPT': PickleRead('output_dir/solve_info/lnlp_all_info_T'),
-    'SQP': PickleRead('output_dir/solve_info/lnlp_all_info_T')
+    'proposed': PickleRead('output_dir/solve_info/osqp_all_info_3'),
+    'OSQP-CS': PickleRead('output_dir/solve_info/osqp_all_info_cs_3'),
+    'IPOPT': PickleRead('output_dir/solve_info/nlp_all_info_3'),
+    'LD-IPOPT': PickleRead('output_dir/solve_info/lnlp_all_info_3'),
+    'SQP': PickleRead('output_dir/solve_info/lnlp_all_info_3')
 }
 
 extracted_data_dict = {

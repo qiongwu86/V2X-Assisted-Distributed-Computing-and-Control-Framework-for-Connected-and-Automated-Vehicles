@@ -51,11 +51,11 @@ def extract_data(_all_info) -> Dict:
 
 
 info_dict = {
-    'proposed': PickleRead('output_dir/solve_info/osqp_solve_info_T'),
-    'OSQP-CS': PickleRead('output_dir/solve_info/osqp_solve_info_cs_T'),
-    'SQP': PickleRead('output_dir/solve_info/sqp_solve_info_T'),
-    'IPOPT': PickleRead('output_dir/solve_info/nlp_solve_info_T'),
-    'LD-IPOPT': PickleRead('output_dir/solve_info/lnlp_solve_info_T'),
+    'proposed': PickleRead('output_dir/solve_info/osqp_solve_info_3'),
+    'OSQP-CS': PickleRead('output_dir/solve_info/osqp_solve_info_cs_3'),
+    'SQP': PickleRead('output_dir/solve_info/sqp_solve_info_3'),
+    'IPOPT': PickleRead('output_dir/solve_info/nlp_solve_info_3'),
+    'LD-IPOPT': PickleRead('output_dir/solve_info/lnlp_solve_info_3'),
 }
 
 
@@ -75,8 +75,8 @@ draw_one_svg(
 
 ##########################################
 info_dict = {
-    'proposed': PickleRead('output_dir/solve_info/osqp_solve_info_T'),
-    'OSQP-CS': PickleRead('output_dir/solve_info/osqp_solve_info_cs_T'),
+    'proposed': PickleRead('output_dir/solve_info/osqp_solve_info_3'),
+    'OSQP-CS': PickleRead('output_dir/solve_info/osqp_solve_info_cs_3'),
     # 'IPOPT': PickleRead('output_dir/solve_info/nlp_solve_info'),
     # 'LD-IPOPT': PickleRead('output_dir/solve_info/lnlp_solve_info')
 }
@@ -108,9 +108,9 @@ draw_one_svg(
 info_dict = {
     # proposed=PickleRead('output_dir/solve_info/osqp_solve_info'),
     # osqp_cs=PickleRead('output_dir/solve_info/osqp_solve_info_cs'),
-    'IPOPT': PickleRead('output_dir/solve_info/nlp_solve_info_T'),
-    'LD-IPOPT': PickleRead('output_dir/solve_info/lnlp_solve_info_T'),
-    'SQP': PickleRead('output_dir/solve_info/sqp_solve_info_T'),
+    'IPOPT': PickleRead('output_dir/solve_info/nlp_solve_info_3'),
+    'LD-IPOPT': PickleRead('output_dir/solve_info/lnlp_solve_info_3'),
+    'SQP': PickleRead('output_dir/solve_info/sqp_solve_info_3'),
 }
 draw_one_svg(
     _data_for_draw=info_dict,
