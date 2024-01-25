@@ -598,8 +598,8 @@ def cross_traj_double_lane_2(
     ax.set_aspect('equal')
     plt.xlim(-35, 35)
     plt.ylim(-35, 35)
-    plt.savefig('output_dir/figs/ref_traj.svg')
     map_info.plot_map(ax)
+    plt.savefig('output_dir/figs/ref_traj.svg')
     plt.show()
     plt.close()
     return all_traj, max_step, info_rounds, map_info

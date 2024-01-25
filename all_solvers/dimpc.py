@@ -14,9 +14,9 @@ class DistributedMPC:
     _initialized: bool = False
 
     default_config = dict(
-        Qx=0.1 * np.diag((1.0, 1.0, 0.0, 0)),
+        Qx=0.5 * np.diag((1.0, 1.0, 0.0, 0)),
         Qu=0.1 * np.diag([1.0, 0.1]),
-        comfort=1.0,
+        comfort=(1.0, 0.3),
         safe_factor=10.0,
         safe_th=5.0,
         init_iter=5,
@@ -31,7 +31,7 @@ class DistributedMPC:
 
     _init_iter: int = 5
     _run_iter: int = 10
-    _comfort: float = 1.0
+    _comfort: Tuple[float] = (1.0, 0.3)
     _safe_factor: float = 10.0,
     _safe_th: float = 4.0
     _sensing_distance: float = 25.0,
@@ -70,7 +70,7 @@ class DistributedMPC:
         cls._osqp_check_termination = config["osqp_check_termination"]
 
         cls._Qx_big = np.kron(np.eye(cls._pred_len), config["Qx"])
-        cls._Qx_big[-4:, -4:] = 10 * config["Qx"]
+        cls._Qx_big[-4:, -4:] = 5 * config["Qx"]
         cls._Qu_big = np.kron(np.eye(cls._pred_len), config["Qu"])
         cls._Q_comfort = cls._gen_Q_comfort()
 
@@ -81,8 +81,10 @@ class DistributedMPC:
     def _gen_Q_comfort(cls) -> np.ndarray:
         Q_comfort = np.zeros((cls._pred_len-1, cls._pred_len*4))
         for i in range(cls._pred_len-1):
-            Q_comfort[i, i*4+2] = -cls._comfort
-            Q_comfort[i, (i+1)*4+2] = cls._comfort
+            Q_comfort[i, i * 4 + 2] = -cls._comfort[0]
+            Q_comfort[i, i * 4 + 3] = -cls._comfort[1]
+            Q_comfort[i, (i + 1) * 4 + 2] = cls._comfort[0]
+            Q_comfort[i, (i + 1) * 4 + 3] = cls._comfort[1]
         return Q_comfort
 
     def __init__(self, init_state: np.ndarray, ref_traj: np.ndarray, mpc_id: int):

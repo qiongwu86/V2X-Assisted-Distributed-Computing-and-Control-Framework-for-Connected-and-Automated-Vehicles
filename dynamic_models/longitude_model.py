@@ -1,48 +1,65 @@
-import casadi
 import numpy as np
 import scipy
+from typing import Dict, Tuple
+
+from numpy import ndarray
 
 
 class LongitudeModel:
 
     default_config = dict(
-        delta_Td=0.1,
-        delta_Ta=0.1
+        T_d=0.1,
+        T_a=0.1
     )
 
-    def __init__(self, config):
-        # param
-        self.delta_Td = config["delta_Td"]
-        self.delta_Ta = config["delta_Ta"]
-        # var
-        self._state = casadi.SX.sym('state', 3)
-        self._control = casadi.SX.sym('control', 1)
-        #
-        Ad, Bd = self._init_system()
-        self.Ad = Ad
-        self.Bd = Bd
+    _Td: float = None
+    _Ta: float = None
 
-    def _init_system(self):
-        Ac = np.array([[0, 1, 0], [0, 0, 1], [0, 0, -1 / self.delta_Ta]])
-        Bc = np.array([[0], [0], [1 / self.delta_Ta]])
+    _A: np.ndarray = None
+    _B: np.ndarray = None
+
+    _T: int = None
+    _M: np.ndarray = None
+    _N: np.ndarray = None
+
+    @classmethod
+    def M(cls):
+        return cls._M
+
+    @classmethod
+    def N(cls):
+        return cls._N
+
+    @classmethod
+    def initialize(cls, config: Dict):
+        cls._Td = config['T_d']
+        cls._Ta = config['T_a']
+        Ac = np.array([[0, 1, 0], [0, 0, 1], [0, 0, -1 / cls._Td]])
+        Bc = np.array([[0], [0], [1 / cls._Ta]])
         Cc = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
         Dc = np.array([[0], [0], [0]])
-        sys_d = scipy.signal.cont2discrete([Ac, Bc, Cc, Dc], self.delta_Td, "zoh")
-        Ad, Bd, _, _, _ = sys_d
-        return Ad, Bd
+        cls._A, cls._B, _, _, _ = scipy.signal.cont2discrete([Ac, Bc, Cc, Dc], cls._Td, "zoh")
 
-    def step_once(self, init_state: np.ndarray, control: float):
-        assert init_state.shape == (3,)
-        next_state = self.Ad @ init_state + self.Bd * control
-        return next_state
-
-    def roll_out(self, init_state: np.ndarray, control: np.ndarray, include_init: bool = True):
-        assert control.shape[1] == 1 and init_state.shape == (3,)
-        steps = control.shape[0]
-        traj = np.zeros((steps+1, 3))
-        traj[0] = init_state
-        for t in range(steps):
-            traj[t+1] = self.step_once(traj[t], control[t])
-        if not include_init:
-            traj = traj[1:]
-        return traj
+    @classmethod
+    def gen_M_N(cls, T: int) -> tuple[ndarray, ndarray]:
+        assert cls._A is not None and cls._B is not None
+        if cls._T is not None:
+            if cls._T == T:
+                return tuple((cls._M, cls._N))
+        # ####################
+        M = np.zeros((T * 3, 3))
+        M[: 3] = cls._A
+        for t in range(1, T):
+            M[t * 3: (t+1) * 3] = M[(t-1) * 3: t * 3] @ cls._A
+        ######################
+        N = np.kron(np.eye(T), cls._B)
+        temp = cls._B
+        for t in range(1, T):
+            temp = cls._A @ temp
+            for _t in range(t, T):
+                N[_t*3: (_t+1)*3, _t - t: _t - t + 1] = temp
+        if cls._T is None:
+            cls._T = T
+            cls._M = M
+            cls._N = N
+        return tuple((M, N))

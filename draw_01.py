@@ -12,7 +12,7 @@ PREDICT_LEN = 30
 def extract_data(_all_info: Dict, _data_name: Text = '', _one_nominal: bool = False) -> Dict:
     _data_num = len(_all_info)
     assert _data_num > 0
-    _veh_ids = [_v_id for _v_id in _all_info[0].keys()]
+    _veh_ids = [_v_id for _v_id in _all_info[0].keys()][0:12:4]
     _ret_dict = {
         _veh_id: dict(
             state=np.zeros((_data_num, 4)),
@@ -103,19 +103,19 @@ def draw_data(
 
 
 info_dict = {
-    'proposed': PickleRead('output_dir/solve_info/osqp_all_info_3'),
-    'OSQP-CS': PickleRead('output_dir/solve_info/osqp_all_info_cs_3'),
-    'IPOPT': PickleRead('output_dir/solve_info/nlp_all_info_3'),
-    'LD-IPOPT': PickleRead('output_dir/solve_info/lnlp_all_info_3'),
-    'SQP': PickleRead('output_dir/solve_info/lnlp_all_info_3')
+    'proposed': PickleRead('output_dir/solve_info/osqp_all_info_12'),
+    # 'OSQP-CS': PickleRead('output_dir/solve_info/osqp_all_info_cs_12'),
+    'IPOPT': PickleRead('output_dir/solve_info/nlp_all_info_12'),
+    # 'LD-IPOPT': PickleRead('output_dir/solve_info/lnlp_all_info_12'),
+    # 'SQP': PickleRead('output_dir/solve_info/lnlp_all_info_3')
 }
 
 extracted_data_dict = {
     'proposed': extract_data(info_dict['proposed']),
-    'OSQP-CS': extract_data(info_dict['OSQP-CS']),
-    'LD-IPOPT': extract_data(info_dict['LD-IPOPT'], _one_nominal=True),
+    # 'OSQP-CS': extract_data(info_dict['OSQP-CS']),
+    # 'LD-IPOPT': extract_data(info_dict['LD-IPOPT'], _one_nominal=True),
     'IPOPT': extract_data(info_dict['IPOPT'], _one_nominal=True),
-    'SQP': extract_data(info_dict['SQP'], _one_nominal=True),
+    # 'SQP': extract_data(info_dict['SQP'], _one_nominal=True),
 }
 
 ###################################
@@ -145,7 +145,7 @@ rect_dict = {
 delta_phi_insert_dict = {
     '1': {
         'ins_pos': (0.01, 0.1, 0.10, 0.85),
-        'x_lim': (15, 25),
+        'x_lim': (30, 40),
         'y_lim': (-0.25, 0.25),
         'alg_name': ['proposed', 'OSQP-CS']
     },
@@ -153,14 +153,34 @@ delta_phi_insert_dict = {
 draw_data(extracted_data_dict,
           name='control',
           _idx=0,
-          _sub_fig_pos=[[0.09, 0.84, 0.85, 0.14],
-                        [0.09, 0.65, 0.85, 0.14],
-                        [0.09, 0.46, 0.85, 0.14],
-                        [0.09, 0.27, 0.85, 0.14],
-                        [0.09, 0.08, 0.85, 0.14]],
+          _sub_fig_pos=[
+              # [0.09, 0.84, 0.85, 0.14],
+              [0.09, 0.80, 0.85, 0.20],
+              [0.09, 0.55, 0.85, 0.20],
+              [0.09, 0.30, 0.85, 0.20],
+              [0.09, 0.10, 0.85, 0.20]
+          ],
           _y_title='acc[$m/s^2$]',
           _x_title='time[ms]',
-          _y_lim=(-0.5, 0.5),
+          _y_lim=(-1, 1),
+          _x_lim=(-20, 110),
+          _rect_dict=rect_dict,
+          _save_name='output_dir/figs/acc.svg',
+          _insert_axes=delta_phi_insert_dict
+          )
+draw_data(extracted_data_dict,
+          name='control',
+          _idx=1,
+          _sub_fig_pos=[
+              # [0.09, 0.84, 0.85, 0.14],
+              [0.09, 0.80, 0.85, 0.20],
+              [0.09, 0.55, 0.85, 0.20],
+              [0.09, 0.30, 0.85, 0.20],
+              [0.09, 0.10, 0.85, 0.20]
+          ],
+          _y_title='acc[$m/s^2$]',
+          _x_title='time[ms]',
+          _y_lim=(-1, 1),
           _x_lim=(-20, 110),
           _rect_dict=rect_dict,
           _save_name='output_dir/figs/acc.svg',

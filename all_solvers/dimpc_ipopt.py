@@ -13,7 +13,7 @@ class DistributedMPCIPOPT:
     default_config = dict(
         Qx=0.1 * np.diag((1.0, 1.0, 0.0, 0)),
         Qu=0.1 * np.diag([1.0, 0.1]),
-        comfort=0.0,
+        comfort=(1.0, 0.3),
         safe_factor=10.0,
         safe_th=5.0,
         init_iter=5,
@@ -27,7 +27,7 @@ class DistributedMPCIPOPT:
 
     _init_iter: int = 5
     _run_iter: int = 10
-    _comfort: float = 1.0
+    _comfort: Tuple[float] = (1.0, 0.3)
     _safe_factor: float = 10.0,
     _safe_th: float = 4.0
     _sensing_distance: float = 25.0,
@@ -62,7 +62,7 @@ class DistributedMPCIPOPT:
         cls._kernel = config["kernel"]
 
         cls._Qx_big = np.kron(np.eye(cls._pred_len), config["Qx"])
-        cls._Qx_big[-4:, -4:] = 10 * config["Qx"]
+        cls._Qx_big[-4:, -4:] = 5 * config["Qx"]
         cls._Qu_big = np.kron(np.eye(cls._pred_len), config["Qu"])
         cls._Q_comfort = cls._gen_Q_comfort()
         cls._nlp_solver, cls._lbx, cls._ubx, cls._lbg, cls._ubg = cls._gen_nlp_solver()
@@ -190,8 +190,10 @@ class DistributedMPCIPOPT:
     def _gen_Q_comfort(cls) -> np.ndarray:
         Q_comfort = np.zeros((cls._pred_len-1, cls._pred_len*4))
         for i in range(cls._pred_len-1):
-            Q_comfort[i, i*4+2] = -cls._comfort
-            Q_comfort[i, (i+1)*4+2] = cls._comfort
+            Q_comfort[i, i * 4 + 2] = -cls._comfort[0]
+            Q_comfort[i, i * 4 + 3] = -cls._comfort[1]
+            Q_comfort[i, (i + 1) * 4 + 2] = cls._comfort[0]
+            Q_comfort[i, (i + 1) * 4 + 3] = cls._comfort[1]
         return Q_comfort
 
     def __init__(self, init_state: np.ndarray, ref_traj: np.ndarray, mpc_id: int):

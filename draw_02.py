@@ -51,11 +51,11 @@ def extract_data(_all_info) -> Dict:
 
 
 info_dict = {
-    'proposed': PickleRead('output_dir/solve_info/osqp_solve_info_3'),
-    'OSQP-CS': PickleRead('output_dir/solve_info/osqp_solve_info_cs_3'),
-    'SQP': PickleRead('output_dir/solve_info/sqp_solve_info_3'),
-    'IPOPT': PickleRead('output_dir/solve_info/nlp_solve_info_3'),
-    'LD-IPOPT': PickleRead('output_dir/solve_info/lnlp_solve_info_3'),
+    'proposed': PickleRead('output_dir/solve_info/osqp_solve_info_12'),
+    'OSQP-CS': PickleRead('output_dir/solve_info/osqp_solve_info_cs_12'),
+    # 'SQP': PickleRead('output_dir/solve_info/sqp_solve_info_12'),
+    'IPOPT': PickleRead('output_dir/solve_info/nlp_solve_info_12'),
+    'LD-IPOPT': PickleRead('output_dir/solve_info/lnlp_solve_info_12'),
 }
 
 
@@ -67,7 +67,7 @@ draw_one_svg(
     _rescale=1e3,
     _sub_fig_pos=[[0.05, -0.05, 0.75, 0.3],
                   [0.05, 0.15, 0.75, 0.3],
-                  [0.05, 0.35, 0.75, 0.3],
+                  # [0.05, 0.35, 0.75, 0.3],
                   [0.05, 0.55, 0.75, 0.3],
                   [0.05, 0.75, 0.75, 0.3],
                   [0.85, 0.05, 0.05, 0.9]]
@@ -75,8 +75,8 @@ draw_one_svg(
 
 ##########################################
 info_dict = {
-    'proposed': PickleRead('output_dir/solve_info/osqp_solve_info_3'),
-    'OSQP-CS': PickleRead('output_dir/solve_info/osqp_solve_info_cs_3'),
+    'proposed': PickleRead('output_dir/solve_info/osqp_solve_info_12'),
+    'OSQP-CS': PickleRead('output_dir/solve_info/osqp_solve_info_cs_12'),
     # 'IPOPT': PickleRead('output_dir/solve_info/nlp_solve_info'),
     # 'LD-IPOPT': PickleRead('output_dir/solve_info/lnlp_solve_info')
 }
