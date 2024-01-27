@@ -41,11 +41,11 @@ for car_id_, traj in enumerate(trajs):
 
 all_info = DistributedMPC.simulate()
 
-gen_video_from_info(all_info, trajs, draw_nominal=False, _map_info=map_info, save_frame=False,
+gen_video_from_info(all_info, trajs, draw_nominal=False, _map_info=map_info, save_frame=True,
                     _draw_all_nominal=True,
                     _custom_lim=((-40, 40), (-40, 40))
                     )
-osqp_solve_info = OSQP_RESULT_INFO.extract_info_from_info_all(all_info)
-PickleSave(osqp_solve_info, "output_dir/solve_info/osqp_solve_info_12")
-PickleSave(all_info, "output_dir/solve_info/osqp_all_info_12")
+# osqp_solve_info = OSQP_RESULT_INFO.extract_info_from_info_all(all_info)
+# PickleSave(osqp_solve_info, "output_dir/solve_info/osqp_solve_info_cs_12")
+# PickleSave(all_info, "output_dir/solve_info/osqp_all_info_cs_12")
 # pass

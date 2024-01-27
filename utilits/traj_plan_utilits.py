@@ -1,7 +1,6 @@
 import numpy as np
-from typing import Tuple, Dict, List, Text
+from typing import Tuple, Dict, Text
 import math
-from utilits import PickleSave
 
 
 def solve_quadratic_equation(a, b, c):
@@ -22,8 +21,6 @@ def solve_quadratic_equation(a, b, c):
         return "无实根"
 
 
-# solutions = solve_quadratic_equation(a, b, c)
-
 class VData:
     def __init__(self,
                  vid: int = 0,
@@ -38,7 +35,9 @@ class VData:
                  d_i: int = 0,
                  veh_num: int = 0,
                  rho: float = 0,
-                 sigma: float = 0
+                 sigma: float = 0,
+                 road: Text = '',
+                 last: bool = None
                  ):
         self.vid: int = vid
         self.tx0: Tuple[int, np.ndarray] = tx0
@@ -53,8 +52,12 @@ class VData:
         self.veh_num: int = veh_num
         self.rho: float = rho
         self.sigma: float = sigma
+        self.road: Text = road
+        self.last: bool = last
 
     def check(self):
+        assert self.last is not None
+        assert self.road != ''
         assert self.tx0[0] == 0
         assert self.d_i + 1 == self.veh_num
         assert self.T == self.tdf[0]
@@ -125,7 +128,7 @@ class TrajDataGenerator:
         order = tuple(sorted(select_points, key=lambda vid: select_points[vid][1]))
         return select_points, order
 
-    def generate_all_vdata(self) -> Dict[int, VData]:
+    def generate_all_vdata(self) -> Tuple[int, Dict[int, VData]]:
         init_states, order = self.gen_init_state()
         all_VDATA: Dict[int, VData] = {v_id: VData(
             vid=v_id,
@@ -134,6 +137,7 @@ class TrajDataGenerator:
             veh_num=self.veh_num,
             rho=self.rho,
             sigma=self.sigma,
+            last=True if v_id == order[0] else False
         ) for v_id in order}
 
         all_data_dict = {v_id: dict(
@@ -152,11 +156,13 @@ class TrajDataGenerator:
                                         / (all_data_dict[v_id]['init_velocity'] + self.over_velocity)
         # tf and tm
         tf = np.mean([data['tf'] for data in all_data_dict.values()])
+        T = int(tf / 0.1)
         for i, v_id in enumerate(order):
             all_data_dict[v_id]['tf'] = int(tf / 0.1)
             # TODO: tm?
-            all_data_dict[v_id]['tm'] = int((tf - 0.5 - 0.4 * i) / 0.1)
-            all_VDATA[v_id].T = all_data_dict[v_id]['tf']
+            all_data_dict[v_id]['tm'] = int((tf - 0.5 - 0.6 * i) / 0.1)
+            all_VDATA[v_id].road = all_data_dict[v_id]['road']
+            all_VDATA[v_id].T = T
             all_VDATA[v_id].tdf = (all_data_dict[v_id]['tf'], all_data_dict[v_id]['final_pos'])
             all_VDATA[v_id].tx0 = \
                 (0, np.array([all_data_dict[v_id]['init_pos'], all_data_dict[v_id]['init_velocity'], 0.0]))
@@ -192,8 +198,7 @@ class TrajDataGenerator:
         for v_id, vdata in all_VDATA.items():
             vdata.check()
 
-
-        return all_VDATA
+        return T, all_VDATA
 
 
 # o = TrajDataGenerator(100, 50, 150, 110, 150, 9, 20, 15, (-2, 2), (-1, 1))

@@ -19,6 +19,10 @@ class ColorSet:
         ColorSet.color_ptr += 1
         return color
 
+    @staticmethod
+    def reset():
+        ColorSet.color_ptr = 0
+
 
 class MapInfo:
     def __init__(self, _solid: List[Dict], _dashed: List[Dict] = None):
@@ -410,6 +414,7 @@ def cross_traj_double_lane_2(
         _over_road_length: float = 30.0,
         _road_width: float = 8.0,
         _round_distance: float = 10,
+        _veh_num: int = 12,
 ) -> Tuple[List[np.ndarray], int, np.ndarray, MapInfo]:
     """
         |2|
@@ -599,7 +604,7 @@ def cross_traj_double_lane_2(
     plt.xlim(-35, 35)
     plt.ylim(-35, 35)
     map_info.plot_map(ax)
-    plt.savefig('output_dir/figs/ref_traj.svg')
+    plt.savefig('output_dir/figs/ref_traj_{}.svg'.format(_veh_num))
     plt.show()
     plt.close()
     return all_traj, max_step, info_rounds, map_info
@@ -707,6 +712,19 @@ def cross_traj_T(
     all_traj = [_traj_1, _traj_2, _traj_3]
     max_step = max([_traj.shape[0] for _traj in all_traj])
     info_rounds = np.array([0])
+
+    map_info = _gen_map_info()
+    fig, ax = plt.subplots()
+    for one_traj in all_traj:
+        ax.plot(one_traj[:, 0], one_traj[:, 1], color=ColorSet.get_next_color(), lw=0.25)
+    ColorSet.reset()
+    ax.set_aspect('equal')
+    plt.xlim(-20, 20)
+    plt.ylim(-20, 5)
+    map_info.plot_map(ax)
+    plt.savefig('output_dir/figs/ref_traj_{}.svg'.format('T'))
+    plt.show()
+    plt.close()
 
     return all_traj, max_step, info_rounds, _gen_map_info()
 
@@ -913,10 +931,10 @@ def gen_video_from_info(_all_info: List[Dict], _all_traj: List[np.ndarray], draw
             plt.ylim(*y_range_draw)
             ax.set_aspect('equal')
             ax.margins(0)
-            text.set_text("Time: {0:3.0f} ms".format(frame))
+            text.set_text("Time: {0:3.1f} s".format(frame / 10))
             if save_frame:
                 plt.savefig('output_dir/frames/frame_{}.svg'.format(frame), dpi=300)
-            car_traj[frame, :] = pos_fun(_state)
+            car_traj[frame, :] = _state[0: 2]
             print("\r{}/{} frame, biggest: {}".format(frame, len(_all_info), t_big_delta), end='')
         return cars.values()
 

@@ -10,7 +10,6 @@ mpc_config['safe_th'] = 2.5
 mpc_config['pred_len'] = 30
 mpc_config['other_veh_num'] = 11
 mpc_config['comfort'] = (4.5, 0.0)
-mpc_config['warm_start'] = True
 mpc_config['Qu'] = 1 * np.diag([0.1, 0.6])
 mpc_config["sensing_distance"] = 100
 

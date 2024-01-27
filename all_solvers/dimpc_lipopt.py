@@ -230,8 +230,10 @@ class DistributedMPCLIPOPT:
     def _gen_Q_comfort(cls) -> np.ndarray:
         Q_comfort = np.zeros((cls._pred_len-1, cls._pred_len*4))
         for i in range(cls._pred_len-1):
-            Q_comfort[i, i*4+2] = -cls._comfort
-            Q_comfort[i, (i+1)*4+2] = cls._comfort
+            Q_comfort[i, i * 4 + 2] = -cls._comfort[0]
+            Q_comfort[i, i * 4 + 3] = -cls._comfort[1]
+            Q_comfort[i, (i + 1) * 4 + 2] = cls._comfort[0]
+            Q_comfort[i, (i + 1) * 4 + 3] = cls._comfort[1]
         return Q_comfort
 
     def __init__(self, init_state: np.ndarray, ref_traj: np.ndarray, mpc_id: int):

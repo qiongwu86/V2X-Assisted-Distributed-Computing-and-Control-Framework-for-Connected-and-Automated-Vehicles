@@ -5,6 +5,9 @@ import matplotlib as mpl
 from typing import Dict, Text, List
 
 
+WHAT = '12'
+
+
 def draw_one_svg(_data_for_draw: Dict, _draw_what: Text, _label: Text, _save_name: Text, _rescale: float, _sub_fig_pos: List):
     _data_for_draw = {
         title: extract_data(origin_data) for title, origin_data in info_dict.items()
@@ -20,9 +23,17 @@ def draw_one_svg(_data_for_draw: Dict, _draw_what: Text, _label: Text, _save_nam
         for _alg_name, _ax in zip(_data_for_draw, axs)
     ]
     [
-        _ax.set_title(_alg_name)
+        # _ax.set_title(_alg_name)
+        _ax.text(1.01, 0.4, _alg_name, transform=_ax.transAxes, fontsize=12)
         for _alg_name, _ax in zip(_data_for_draw, axs)
     ]
+    [
+        _ax.axis('off')
+        for _ax in axs[1:-1]
+    ]
+    axs[0].set_yticks([0, 11])
+    axs[0].set_yticklabels(['V1', 'V12'])
+    axs[0].set_xlabel('time[0.1s]')
     fig.colorbar(mpl.cm.ScalarMappable(norm=mpl.colors.Normalize(_rescale*_value_min, _rescale*_value_max), cmap='plasma'),
                  cax=axs[-1], orientation='vertical', label=_label)
 
@@ -51,11 +62,11 @@ def extract_data(_all_info) -> Dict:
 
 
 info_dict = {
-    'proposed': PickleRead('output_dir/solve_info/osqp_solve_info_12'),
-    'OSQP-CS': PickleRead('output_dir/solve_info/osqp_solve_info_cs_12'),
-    # 'SQP': PickleRead('output_dir/solve_info/sqp_solve_info_12'),
-    'IPOPT': PickleRead('output_dir/solve_info/nlp_solve_info_12'),
-    'LD-IPOPT': PickleRead('output_dir/solve_info/lnlp_solve_info_12'),
+    'proposed': PickleRead('output_dir/solve_info/osqp_solve_info_{}'.format(WHAT)),
+    'OSQP-CS': PickleRead('output_dir/solve_info/osqp_solve_info_cs_{}'.format(WHAT)),
+    # 'SQP': PickleRead('output_dir/solve_info/sqp_solve_info_{}'.format(WHAT)),
+    'IPOPT': PickleRead('output_dir/solve_info/nlp_solve_info_{}'.format(WHAT)),
+    'LD-IPOPT': PickleRead('output_dir/solve_info/lnlp_solve_info_{}'.format(WHAT)),
 }
 
 
@@ -65,18 +76,18 @@ draw_one_svg(
     _label='run time[ms]',
     _save_name='run_time_all.svg',
     _rescale=1e3,
-    _sub_fig_pos=[[0.05, -0.05, 0.75, 0.3],
-                  [0.05, 0.15, 0.75, 0.3],
-                  # [0.05, 0.35, 0.75, 0.3],
-                  [0.05, 0.55, 0.75, 0.3],
-                  [0.05, 0.75, 0.75, 0.3],
-                  [0.85, 0.05, 0.05, 0.9]]
+    _sub_fig_pos=[[0.042, 0.00-0.05, 0.75, 0.5],
+                  [0.042, 0.22-0.05, 0.75, 0.5],
+                  [0.042, 0.44-0.05, 0.75, 0.5],
+                  [0.042, 0.66-0.05, 0.75, 0.5],
+                  # [0.035, 0.72, 7.75, 0.3],
+                  [0.92, 0.10, 0.025, 0.75]]
 )
 
 ##########################################
 info_dict = {
-    'proposed': PickleRead('output_dir/solve_info/osqp_solve_info_12'),
-    'OSQP-CS': PickleRead('output_dir/solve_info/osqp_solve_info_cs_12'),
+    'proposed': PickleRead('output_dir/solve_info/osqp_solve_info_{}'.format(WHAT)),
+    'OSQP-CS': PickleRead('output_dir/solve_info/osqp_solve_info_cs_{}'.format(WHAT)),
     # 'IPOPT': PickleRead('output_dir/solve_info/nlp_solve_info'),
     # 'LD-IPOPT': PickleRead('output_dir/solve_info/lnlp_solve_info')
 }
@@ -87,8 +98,8 @@ draw_one_svg(
     _label='run time[ms]',
     _save_name='run_time_01.svg',
     _rescale=1e3,
-    _sub_fig_pos=[[0.05, 0.08, 0.75, 0.3],
-                  [0.05, 0.5, 0.75, 0.3],
+    _sub_fig_pos=[[0.035, 0.12, 0.75, 0.3],
+                  [0.035, 0.27, 0.75, 0.3],
                   [0.85, 0.08, 0.05, 0.7]]
 )
 
@@ -98,9 +109,9 @@ draw_one_svg(
     _label='iter times',
     _save_name='iter_times_01.svg',
     _rescale=1,
-    _sub_fig_pos=[[0.05, 0.08, 0.75, 0.3],
-                  [0.05, 0.5, 0.75, 0.3],
-                  [0.85, 0.08, 0.05, 0.7]]
+    _sub_fig_pos=[[0.035, 0.12, 0.75, 0.3],
+                  [0.035, 0.57, 0.75, 0.3],
+                  [0.89, 0.08, 0.05, 0.7]]
 )
 
 
@@ -108,9 +119,9 @@ draw_one_svg(
 info_dict = {
     # proposed=PickleRead('output_dir/solve_info/osqp_solve_info'),
     # osqp_cs=PickleRead('output_dir/solve_info/osqp_solve_info_cs'),
-    'IPOPT': PickleRead('output_dir/solve_info/nlp_solve_info_3'),
-    'LD-IPOPT': PickleRead('output_dir/solve_info/lnlp_solve_info_3'),
-    'SQP': PickleRead('output_dir/solve_info/sqp_solve_info_3'),
+    'IPOPT': PickleRead('output_dir/solve_info/nlp_solve_info_{}'.format(WHAT)),
+    'LD-IPOPT': PickleRead('output_dir/solve_info/lnlp_solve_info_{}'.format(WHAT)),
+    'SQP': PickleRead('output_dir/solve_info/sqp_solve_info_{}'.format(WHAT)),
 }
 draw_one_svg(
     _data_for_draw=info_dict,

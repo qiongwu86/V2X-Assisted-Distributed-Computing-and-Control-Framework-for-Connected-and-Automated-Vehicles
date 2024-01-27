@@ -4,10 +4,10 @@ import osqp
 from dynamic_models import LongitudeModel
 from utilits import VData, TrajDataGenerator, suppress_stdout_stderr, PickleRead, PickleSave
 from scipy import sparse
+import tqdm
 
 
 class ADMM:
-
     _all_y: List[np.ndarray] = list()
 
     @classmethod
@@ -33,7 +33,7 @@ class ADMM:
         self._y: np.ndarray = np.zeros((self._data.T * self._data.veh_num,))
         self._z: np.ndarray = np.zeros((self._data.T * self._data.veh_num,))
 
-        self._init_osqp()
+        # self._init_osqp()
 
     def _gen_M_lu(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         M = np.zeros((3, self._data.T * 3))
@@ -43,8 +43,8 @@ class ADMM:
         l_pos = np.array([
             10 * (self._data.tdvp[1] - self.X_0[0]) / (self._data.tdvp[0] - self._data.tx0[0]),
             -np.inf,
-            # 10 * (self._data.tdf[1] - self.X_0[0]) / (self._data.tdf[0] - self._data.tx0[0])
-            -np.inf
+            10 * (self._data.tdf[1] - self.X_0[0]) / (self._data.tdf[0] - self._data.tx0[0]) if self._data.last
+            else -np.inf
         ])
         u_pos = np.array([
             np.inf,
@@ -108,9 +108,11 @@ class ADMM:
             self._u_pos - self._M_i @ self._K @ self._data.tx0[1]
         ))
         with suppress_stdout_stderr():
+            self._osqp = osqp.OSQP()
             self._osqp.setup(_P, _q, _A, _l, _u)
 
     def _solve_x(self) -> np.ndarray:
+        self._init_osqp()
         self._osqp.update(
             q=(self._A_i.transpose() @ self._r) / (2 * (self._data.sigma + 2 * self._data.rho * self._data.d_i)))
         with suppress_stdout_stderr():
@@ -125,8 +127,8 @@ class ADMM:
         self._s = self._s + self._data.sigma * (self._y - self._z)
         # r
         self._r = self._data.sigma * self._z \
-                + self._data.rho * (sum([self._y + oy for oy in self._all_y]) - 2 * self._y) \
-                - (self._b_i + self._p + self._s)
+                  + self._data.rho * (sum([self._y + oy for oy in self._all_y]) - 2 * self._y) \
+                  - (self._b_i + self._p + self._s)
         # x
         self._solve_x()
         # y
@@ -134,10 +136,35 @@ class ADMM:
         # z
         self._z = np.clip(self._y + self._s / self._data.sigma, -np.inf, 0)
 
+    def _update_rs(self, rho: float, sigma: float):
+        self._data.rho = rho
+        self._data.sigma = sigma
+
     @classmethod
-    def STEP(cls):
+    def STEP(cls, rho_sigma: Tuple[float, float] = None) -> Dict[int, Tuple[str, np.ndarray, np.ndarray]]:
+        ADMM.communicate()
+        ret_dict = dict()
         for admm in _all_ADMM:
+            if rho_sigma is not None:
+                admm._update_rs(rho_sigma[0], rho_sigma[1])
             admm.step()
+            u = admm._x.copy()
+            s = (LongitudeModel.M() @ admm.X_0 + LongitudeModel.N() @ admm.results).reshape((-1, 3))
+            road = admm._data.road
+            ret_dict[admm._data.vid] = (road, u, s)
+        return ret_dict
+
+    @classmethod
+    def STEP_ALL(cls, step_nums: int, rho_sigma_list: List = None) -> List:
+        if rho_sigma_list is not None:
+            assert len(rho_sigma_list) == step_nums
+        ALL_DATA = list()
+        for step in tqdm.tqdm(range(step_nums)):
+            if rho_sigma_list is not None:
+                ALL_DATA.append(cls.STEP(rho_sigma_list[step]))
+            else:
+                ALL_DATA.append(cls.STEP())
+        return ALL_DATA
 
     @property
     def VID(self) -> int:
@@ -152,25 +179,35 @@ class ADMM:
         return self._data.tx0[1]
 
 
-
 _all_ADMM: List[ADMM] = list()
 
-
 if __name__ == '__main__':
+    import matplotlib.pyplot as plt
+
+    rho_sigma_list = [(50000.0, 50000.0) for _ in range(10)]
+
     LongitudeModel.initialize(LongitudeModel.default_config)
-    generator = TrajDataGenerator(100, 50, 150, 110, 150, 10, 20, 15, (-3, 3), (-5, 5), sigma=0.3, rho=0.03)
-    trajs = generator.generate_all_vdata()
+    generator = TrajDataGenerator(100, 50, 150, 110, 150, 10, 20, 15, (-3, 3), (-7, 7), sigma=5, rho=5)
+    _, trajs = generator.generate_all_vdata()
+
+    iter_times = 100
+    rho_sigma_list = rho_sigma_list + [(0.5, 0.5) for _ in range(iter_times - len(rho_sigma_list))]
+
     PickleSave(trajs, '../output_dir/temp01')
     # trajs = PickleRead('../output_dir/temp01')
     for vid, vdata in trajs.items():
         ADMM(vdata)
-    for i in range(100):
-        ADMM.communicate()
-        ADMM.STEP()
-    import matplotlib.pyplot as plt
-    x_main = [(LongitudeModel.M() @ admm.X_0 + LongitudeModel.N() @ admm.results) for admm in _all_ADMM]
-    x_main_ = [x.reshape((-1, 3))[:, 0] for x in x_main]
 
-    [plt.plot(_) for _ in x_main_]
-    plt.show()
+    all_info = ADMM.STEP_ALL(iter_times, rho_sigma_list=rho_sigma_list)
+
+    for i, one_step_info in enumerate(all_info):
+        if (i + 1) % 10 == 0:
+            for v_id, one_traj in one_step_info.items():
+                road, u, s = one_traj
+                plt.plot(
+                    one_traj[2][:, 0],
+                    color='red' if road == 'main' else 'green'
+                )
+            plt.savefig('../output_dir/traj_plan/traj_plan_{}.jpg'.format(i))
+            plt.close()
     pass
