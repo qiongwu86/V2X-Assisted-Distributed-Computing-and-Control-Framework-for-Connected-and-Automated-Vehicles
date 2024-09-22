@@ -29,7 +29,7 @@ class MapInfo:
         self._solid = _solid
         self._dashed = _dashed if _dashed is not None else list()
 
-    def plot_map(self, _ax, _lw=0.25):
+    def plot_map(self, _ax, _lw=1):
         self.plot_solid(_ax, _lw)
         for _one_dashed in self._dashed:
             _ax.plot(_one_dashed['x'], _one_dashed['y'], linestyle='--', linewidth=_lw, color='black')
@@ -37,6 +37,23 @@ class MapInfo:
     def plot_solid(self, _ax, _lw=0.25):
         for _one_solid in self._solid:
             _ax.plot(_one_solid['x'], _one_solid['y'], linestyle='-', linewidth=_lw, color='black')
+
+    def plot_map_solo(self, x_lim: Tuple[float, float], y_lim: Tuple[float, float]):
+        _, ax = plt.subplots()
+        self.plot_solid(ax)
+        for _one_solid in self._solid:
+            ax.plot(_one_solid['x'], _one_solid['y'], linestyle='-', linewidth=1, color='black')
+        for _one_dashed in self._dashed:
+            ax.plot(_one_dashed['x'], _one_dashed['y'], linestyle='--', linewidth=1, color='green')
+        plt.xlim(*x_lim)
+        plt.ylim(*y_lim)
+        plt.xlabel("$x$[m]")
+        plt.ylabel("$y$[m]")
+        ax.set_aspect('equal')
+        ax.margins(0)
+        plt.savefig('output_dir/figs/map_traj.svg', dpi=300, bbox_inches='tight', pad_inches=.1)
+        plt.show()
+        plt.close()
 
 
 def _rand_in_range(low: float, high: float) -> float:
@@ -425,10 +442,10 @@ def cross_traj_double_lane_2(
         |0|
     """
     _log = (
-        ((0, 0), (3, 2)), ((1, 0), (2, 2)), ((2, 0), (0, 2)), ((3, 0), (1, 2)),
-        ((0, 1), (2, 1)), ((1, 1), (3, 1)), ((2, 1), (1, 1)), ((3, 1), (2, 0)),
-        ((0, 2), (1, 0)), ((1, 2), (0, 1)), ((2, 2), (3, 0)), ((3, 2), (0, 0)),
-    )
+               ((0, 0), (3, 2)), ((1, 0), (2, 2)), ((2, 0), (0, 2)), ((3, 0), (1, 2)),
+               ((0, 1), (2, 1)), ((1, 1), (3, 1)), ((2, 1), (1, 1)), ((3, 1), (2, 0)),
+               ((0, 2), (1, 0)), ((1, 2), (0, 1)), ((2, 2), (3, 0)), ((3, 2), (0, 0)),
+           )[:_veh_num]
     assert _log is not None
 
     def _ft(_f: Tuple, _t: Tuple):
@@ -599,11 +616,13 @@ def cross_traj_double_lane_2(
         round_traj, _max_step = _gen_one_traj(_from_to[0], _from_to[1])
         max_step = min(max_step, _max_step)
         all_traj = all_traj + [round_traj, ]
-        ax.plot(round_traj[:, 0], round_traj[:, 1], color=ColorSet.get_next_color(), lw=0.25)
+        ax.plot(round_traj[:, 0], round_traj[:, 1], color=ColorSet.get_next_color(), lw=0.5)
     ax.set_aspect('equal')
     plt.xlim(-35, 35)
     plt.ylim(-35, 35)
     map_info.plot_map(ax)
+    plt.xlabel("$x$[m]")
+    plt.ylabel("$y$[m]")
     plt.savefig('output_dir/figs/ref_traj_{}.svg'.format(_veh_num))
     plt.show()
     plt.close()
@@ -716,12 +735,14 @@ def cross_traj_T(
     map_info = _gen_map_info()
     fig, ax = plt.subplots()
     for one_traj in all_traj:
-        ax.plot(one_traj[:, 0], one_traj[:, 1], color=ColorSet.get_next_color(), lw=0.25)
+        ax.plot(one_traj[:, 0], one_traj[:, 1], color=ColorSet.get_next_color(), lw=0.5)
     ColorSet.reset()
     ax.set_aspect('equal')
     plt.xlim(-20, 20)
     plt.ylim(-20, 5)
     map_info.plot_map(ax)
+    plt.xlabel("$x$[m]")
+    plt.ylabel("$y$[m]")
     plt.savefig('output_dir/figs/ref_traj_{}.svg'.format('T'))
     plt.show()
     plt.close()
@@ -834,7 +855,7 @@ def gen_video_from_info(_all_info: List[Dict], _all_traj: List[np.ndarray], draw
     fig, ax = plt.subplots()
     if _map_info:
         _map_info.plot_map(ax)
-    text = ax.text(0.85, 0.95, '', transform=ax.transAxes, ha='right')
+    text = ax.text(1.95, 0.30, '', transform=ax.transAxes, ha='right')
 
     cars: Dict[int: List[matplotlib.artist.Artist]] = {}
     for _car_id in _all_info[0].keys():
@@ -931,9 +952,21 @@ def gen_video_from_info(_all_info: List[Dict], _all_traj: List[np.ndarray], draw
             plt.ylim(*y_range_draw)
             ax.set_aspect('equal')
             ax.margins(0)
+            # plt.axis('off')
             text.set_text("Time: {0:3.1f} s".format(frame / 10))
             if save_frame:
-                plt.savefig('output_dir/frames/frame_{}.svg'.format(frame), dpi=300)
+                plt.savefig('output_dir/frames/frame_{}.svg'.format(frame), dpi=300, bbox_inches='tight',
+                            pad_inches=.01)
+                if frame == 0:
+                    plt.xlabel("$x$[m]")
+                    # ax.set_xticklabels([])
+                    plt.ylabel("$y$[m]")
+                    # ax.set_yticklabels([])
+                    plt.xlim(0, 170)
+                    plt.ylim(-10, 5)
+                    text.set_text(" ")
+                    plt.savefig('output_dir/frames/first_frame.eps', dpi=300, bbox_inches='tight', pad_inches=.01)
+                    plt.savefig('output_dir/frames/first_frame.svg', dpi=300, bbox_inches='tight', pad_inches=.01)
             car_traj[frame, :] = _state[0: 2]
             print("\r{}/{} frame, biggest: {}".format(frame, len(_all_info), t_big_delta), end='')
         return cars.values()
@@ -941,7 +974,24 @@ def gen_video_from_info(_all_info: List[Dict], _all_traj: List[np.ndarray], draw
     anim = animation.FuncAnimation(fig, update, frames=len(_all_info), interval=100)
     writer = animation.FFMpegWriter(fps=10)
     anim.save('output_dir/video/one_veh.mp4', writer=writer)
+
+    fig, axs = plt.subplots(1, 2)
     # save traj
+    _map_info.plot_map(axs[0])
+    # axs.set_xticks([])
+    # axs.set_yticks([])
+    axs[0].set_aspect('equal')
+    axs[0].margins(0)
+    rect = patches.Rectangle(
+        (-10, -10),
+        20,
+        20,
+        fill=False,
+        edgecolor='red',
+        lw=1.5,
+        alpha=0.8
+    )
+    axs[0].add_patch(rect)
     for car_id, car_obj_list in cars.items():
         car_rect, car_nominal, car_color, car_traj = car_obj_list
         _state = _get_state(0, car_id, _all_info)
@@ -954,12 +1004,163 @@ def gen_video_from_info(_all_info: List[Dict], _all_traj: List[np.ndarray], draw
         else:
             car_nominal.remove()
         # draw
-        plt.plot(car_traj[:, 0], car_traj[:, 1], color=car_color, lw=0.25)
-    plt.xlim(*x_range_draw)
-    plt.ylim(*y_range_draw)
-    plt.savefig('output_dir/figs/traj.svg', dpi=300)
+        axs[0].plot(car_traj[:, 0], car_traj[:, 1], color=car_color, lw=0.5)
+    axs[0].set_xlim(*x_range_draw)
+    axs[0].set_ylim(*y_range_draw)
+    axs[0].set_xlabel("$x$[m]")
+    axs[0].set_ylabel("$y$[m]")
+    plt.savefig('output_dir/figs/traj.svg', dpi=300, bbox_inches='tight', pad_inches=.01)
+    plt.savefig('output_dir/figs/traj.eps', dpi=300, bbox_inches='tight', pad_inches=.01)
+
+    # return
+    _map_info.plot_map(axs[1])
+    axs[1].set_aspect('equal')
+    axs[1].margins(0)
+    for car_id, car_obj_list in cars.items():
+        car_rect, car_nominal, car_color, car_traj = car_obj_list
+        _state = _get_state(0, car_id, _all_info)
+        # remove
+        car_rect.set_xy((100, 100))
+        if isinstance(car_nominal, list):
+            [_nom.remove() for _nom in car_nominal]
+        # elif car_nominal is None:
+        #     pass
+        # else:
+        #     car_nominal.remove()
+        # draw
+        axs[1].plot(car_traj[:, 0], car_traj[:, 1], color=car_color, lw=0.25)
+    axs[1].set_xlim((-10, 10))
+    axs[1].set_ylim((-10, 10))
+    axs[1].set_yticklabels([])
+    axs[1].set_xticklabels([])
+    plt.savefig('output_dir/figs/traj.svg', dpi=300, bbox_inches='tight', pad_inches=.01)
+    plt.savefig('output_dir/figs/traj.eps', dpi=300, bbox_inches='tight', pad_inches=.01)
     plt.close()
 
 
+def gen_video_from_info2(_all_info: List[Dict], _all_traj: List[np.ndarray], draw_nominal=True,
+                         _draw_all_nominal: bool = False,
+                         _map_info: MapInfo = None, save_frame: bool = False,
+                         _custom_lim=None) -> None:
+    def _get_nominal(_t: int, veh_id: int, _info: List[Dict], _which: int = -1) -> np.ndarray:
+        return _info[_t][veh_id]["nominal"][_which][0]  # just x_nominal, so [0]
+
+    def _get_state(_t: int, veh_id: int, _info: List[Dict]) -> np.ndarray:
+        return _info[_t][veh_id]["new_state"]
+
+    def pos_fun(state: np.ndarray):
+        assert state.shape == (4,)
+        x, y, phi, _ = state
+        W = KinematicModel.length
+        H = KinematicModel.width
+        k = 0.5 * np.sqrt(W ** 2 + H ** 2)
+        beta = 0.5 * np.pi - phi - np.arctan(H / W)
+        x_ = x - k * np.sin(beta)
+        y_ = y - k * np.cos(beta)
+        return x_, y_
+
+    from matplotlib import animation, patches
+    fig, axs = plt.subplots(3, 2)
+    axs = axs.flat
+
+    what = {
+        0: [10, 'y'],
+        1: [30, ],
+        2: [50, 'y'],
+        3: [60, ],
+        4: [70, 'x', 'y'],
+        5: [80, 'x']
+    }
+    label_list = ['(a)', '(b)', '(c)', '(d)', '(e)', '(f)']
+
+    # draw_range
+    x_max = max([np.max(one_traj[:, 0]) for one_traj in _all_traj]) + 5
+    x_min = min([np.min(one_traj[:, 0]) for one_traj in _all_traj]) - 5
+    x_range_draw = (x_min, x_max)
+    y_max = max([np.max(one_traj[:, 1]) for one_traj in _all_traj]) + 5
+    y_min = min([np.min(one_traj[:, 1]) for one_traj in _all_traj]) - 5
+    y_range_draw = (y_min, y_max)
+
+    if _custom_lim is not None:
+        x_range_draw = _custom_lim[0]
+        y_range_draw = _custom_lim[1]
+
+    for ax_inx, _time in what.items():
+        ColorSet.reset()
+        axs[ax_inx].set_xlim(*x_range_draw)
+        axs[ax_inx].set_ylim(*y_range_draw)
+        axs[ax_inx].set_aspect('equal')
+        axs[ax_inx].margins(0)
+        if 'x' in _time:
+            axs[ax_inx].set_xlabel(r"\!\!\!\!\!\!\!\!$x$[m]" + r'\\\hspace{2cm}' + label_list[ax_inx])
+        else:
+            axs[ax_inx].set_xlabel(label_list[ax_inx])
+            axs[ax_inx].set_xticklabels([])
+        if 'y' in _time:
+            axs[ax_inx].set_ylabel("$y$[m]")
+        else:
+            axs[ax_inx].set_yticklabels([])
+        text = axs[ax_inx].text(0.95, 0.20, '', transform=axs[ax_inx].transAxes, ha='right')
+        _map_info.plot_map(axs[ax_inx])
+        text.set_text("Time: {0:3.1f} s".format(_time[0] / 10))
+        for _car_id in _all_info[0].keys():
+            _car_color = ColorSet.get_next_color()
+            rect = patches.Rectangle(
+                (0, 0),
+                KinematicModel.length,
+                KinematicModel.width,
+                fill=True,
+                facecolor=_car_color,
+                edgecolor=None
+            )
+            _state = _get_state(_time[0], _car_id, _all_info)
+            rect.set_xy(pos_fun(_state))
+            rect.set_angle(np.rad2deg(_state[2]))
+            axs[ax_inx].add_patch(rect)
+
+            car_nominal = axs[ax_inx].plot(
+                _get_nominal(0, _car_id, _all_info)[:, 0],
+                _get_nominal(0, _car_id, _all_info)[:, 1],
+                color="red",
+                linewidth=0.25
+            )[0]
+            _nominal = _get_nominal(_time[0], _car_id, _all_info)
+            car_nominal.set_xdata(_nominal[:, 0])
+            car_nominal.set_ydata(_nominal[:, 1])
+
+    plt.show()
+
+
 if __name__ == "__main__":
+    all_traj_cross, _, _, cross_map_info = cross_traj_double_lane_2(
+        _run_time=15.0,
+        _round_distance=13,
+        _road_width=8.5
+    )
+    all_traj_T, _, _, T_map_info = cross_traj_T(
+        _road_width=8.5,
+        _init_road_length=15,
+        _over_road_length=40,
+    )
+
+    fig, axes = plt.subplots(1, 2)
+
+    for one_traj in all_traj_T:
+        axes[0].plot(one_traj[:, 0], one_traj[:, 1], color=ColorSet.get_next_color(), lw=0.25)
+    ColorSet.reset()
+    axes[0].set_aspect('equal')
+    axes[0].set_xlim(-20, 20)
+    axes[0].set_ylim(-20, 5)
+    T_map_info.plot_map(axes[0])
+
+    for one_traj in all_traj_cross:
+        axes[1].plot(one_traj[:, 0], one_traj[:, 1], color=ColorSet.get_next_color(), lw=0.25)
+    axes[1].set_aspect('equal')
+    axes[1].set_xlim(-35, 35)
+    axes[1].set_ylim(-35, 35)
+    cross_map_info.plot_map(axes[1])
+
+    plt.savefig(pad_inches=0.0)
+    plt.show()
+
     pass

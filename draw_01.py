@@ -1,3 +1,6 @@
+"""
+轨迹绘制
+"""
 import matplotlib.pyplot as plt
 from utilits import *
 import numpy as np
@@ -9,10 +12,18 @@ from utilits import dimpc_utilts
 PREDICT_LEN = 30
 
 
+WHAT = 'T'
+LANG = 'CN'
+plt.rcParams.update({'font.size': 12,
+                     "text.usetex": False})
+plt.rcParams['font.sans-serif'] = ['SimSun']
+# plt.rcParams['font.sans-serif'] = ['Times New Roman']
+
+
 def extract_data(_all_info: Dict, _data_name: Text = '', _one_nominal: bool = False) -> Dict:
     _data_num = len(_all_info)
     assert _data_num > 0
-    _veh_ids = [_v_id for _v_id in _all_info[0].keys()][0:12:4]
+    _veh_ids = [_v_id for _v_id in _all_info[0].keys()][:]
     _ret_dict = {
         _veh_id: dict(
             state=np.zeros((_data_num, 4)),
@@ -47,16 +58,24 @@ def draw_data(
         _x_lim: Tuple,
         _insert_axes=None,
         _rect_dict=None,
-        _save_name=None
+        _save_name=None,
+        _draw_title=False
 ):
-    fig, axs = plt.subplots(len(_extracted_data), 1, figsize=(8, 1.5 * len(_extracted_data)))
+    fig, axs = plt.subplots(len(_extracted_data), 1, figsize=(1, 2 * len(_extracted_data)))
     for _ax, _alg_name in zip(axs, _extracted_data):
         _alg_data = _extracted_data[_alg_name]
-        _ax.set_title(_alg_name, fontsize=10, fontweight=1, rotation='vertical', x=1.02, y=0.4, va='center')
+        if _draw_title:
+            _ax.set_title(_alg_name if LANG == "EN" else en_to_cn(_alg_name), fontsize=10, fontweight=1, rotation='vertical', x=1.02, y=0.4, va='center')
         _ax.set_ylim(*_y_lim)
         _ax.set_xlim(*_x_lim)
-        _ax.set_ylabel(_y_title)
+        if _ax == axs[-1]:
+            _ax.set_ylabel(_y_title)
+            # _ax.yaxis.set_label_coords(0.5, 1.05)
+        if _ax != axs[-1]:
+            # _ax.set_xticks([])
+            _ax.set_xticklabels([])
         _ax.grid(True)
+        dimpc_utilts.ColorSet.reset()
         for _v_id, _v_data in _alg_data.items():
             _ax.plot(_v_data[name][:, _idx], lw=0.75, color=dimpc_utilts.ColorSet.get_next_color())
         if _rect_dict is not None:
@@ -85,8 +104,8 @@ def draw_data(
                     mark_inset(_ax, _ax_in, loc1=4, loc2=1, fc="none", ec='k', lw=1)
                     rect = patches.Rectangle(
                         (_ins_data['x_lim'][0], _ins_data['y_lim'][0]),
-                        _ins_data['x_lim'][1]-_ins_data['x_lim'][0],
-                        _ins_data['y_lim'][1]-_ins_data['y_lim'][0],
+                        _ins_data['x_lim'][1] - _ins_data['x_lim'][0],
+                        _ins_data['y_lim'][1] - _ins_data['y_lim'][0],
                         fill=False,
                         edgecolor='b',
                         lw=1,
@@ -97,23 +116,25 @@ def draw_data(
                         _ax_in.plot(_v_data[name][:, _idx], lw=0.75, color=dimpc_utilts.ColorSet.get_next_color())
     [_ax.set_position(_sub_fig_pos[i]) for i, _ax in enumerate(axs)]
     axs[-1].set_xlabel(_x_title)
+    axs[-1].set_ylabel(_y_title)
+    plt.subplots_adjust(left=0.09, right=0.97, top=0.963, bottom=0.055, hspace=0.2, wspace=0.2)
     if _save_name is not None:
         plt.savefig(_save_name)
     plt.show()
 
 
 info_dict = {
-    'proposed': PickleRead('output_dir/solve_info/osqp_all_info_12'),
-    # 'OSQP-CS': PickleRead('output_dir/solve_info/osqp_all_info_cs_12'),
-    'IPOPT': PickleRead('output_dir/solve_info/nlp_all_info_12'),
-    # 'LD-IPOPT': PickleRead('output_dir/solve_info/lnlp_all_info_12'),
-    # 'SQP': PickleRead('output_dir/solve_info/lnlp_all_info_3')
+    'Our': PickleRead('output_dir/solve_info/osqp_all_info_{}'.format(WHAT)),
+    'OSQP-CS': PickleRead('output_dir/solve_info/osqp_all_info_cs_{}'.format(WHAT)),
+    'IPOPT': PickleRead('output_dir/solve_info/nlp_all_info_{}'.format(WHAT)),
+    'LD-IPOPT': PickleRead('output_dir/solve_info/lnlp_all_info_{}'.format(WHAT)),
+    # 'SQP': PickleRead('output_dir/solve_info/lnlp_all_info_T')
 }
 
 extracted_data_dict = {
-    'proposed': extract_data(info_dict['proposed']),
-    # 'OSQP-CS': extract_data(info_dict['OSQP-CS']),
-    # 'LD-IPOPT': extract_data(info_dict['LD-IPOPT'], _one_nominal=True),
+    'Our': extract_data(info_dict['Our']),
+    'OSQP-CS': extract_data(info_dict['OSQP-CS']),
+    'LD-IPOPT': extract_data(info_dict['LD-IPOPT'], _one_nominal=True),
     'IPOPT': extract_data(info_dict['IPOPT'], _one_nominal=True),
     # 'SQP': extract_data(info_dict['SQP'], _one_nominal=True),
 }
@@ -154,37 +175,38 @@ draw_data(extracted_data_dict,
           name='control',
           _idx=0,
           _sub_fig_pos=[
-              # [0.09, 0.84, 0.85, 0.14],
-              [0.09, 0.80, 0.85, 0.20],
-              [0.09, 0.55, 0.85, 0.20],
-              [0.09, 0.30, 0.85, 0.20],
-              [0.09, 0.10, 0.85, 0.20]
+              [0.09, 0.80, 0.85, 0.14],
+              [0.09, 0.60, 0.85, 0.20],
+              [0.09, 0.40, 0.85, 0.20],
+              [0.09, 0.20, 0.85, 0.20],
+              [0.09, 0.00, 0.85, 0.20]
           ],
-          _y_title='acc[$m/s^2$]',
-          _x_title='time[ms]',
-          _y_lim=(-1, 1),
-          _x_lim=(-20, 110),
-          _rect_dict=rect_dict,
+          _y_title='$a$[$m/s^2$]' if LANG == 'EN' else '加速度[$\mathrm{m/s^2}$]',
+          _x_title='time[0.1s]' if LANG == 'EN' else '时间[0.1$\mathrm{s}$]',
+          _y_lim=(-2, 2),
+          _x_lim=(-0, 110),
+          # _rect_dict=rect_dict,
           _save_name='output_dir/figs/acc.svg',
-          _insert_axes=delta_phi_insert_dict
+          # _insert_axes=delta_phi_insert_dict
           )
 draw_data(extracted_data_dict,
           name='control',
           _idx=1,
           _sub_fig_pos=[
-              # [0.09, 0.84, 0.85, 0.14],
-              [0.09, 0.80, 0.85, 0.20],
-              [0.09, 0.55, 0.85, 0.20],
-              [0.09, 0.30, 0.85, 0.20],
-              [0.09, 0.10, 0.85, 0.20]
+              [0.09, 0.80, 0.85, 0.14],
+              [0.09, 0.60, 0.85, 0.20],
+              [0.09, 0.40, 0.85, 0.20],
+              [0.09, 0.20, 0.85, 0.20],
+              [0.09, 0.00, 0.85, 0.20]
           ],
-          _y_title='acc[$m/s^2$]',
-          _x_title='time[ms]',
-          _y_lim=(-1, 1),
-          _x_lim=(-20, 110),
-          _rect_dict=rect_dict,
-          _save_name='output_dir/figs/acc.svg',
-          _insert_axes=delta_phi_insert_dict
+          _y_title='$\psi$[rad]' if LANG == 'EN' else '转向角[$\mathrm{rad}$]',
+          _x_title='time[0.1s]' if LANG == 'EN' else '时间[0.1$\mathrm{s}$]',
+          _y_lim=(-.65, .65),
+          _x_lim=(-0, 110),
+          # _rect_dict=rect_dict,
+          _save_name='output_dir/figs/steer.svg',
+          # _insert_axes=delta_phi_insert_dict
+          _draw_title=True
           )
 
 ###################################################
@@ -222,19 +244,21 @@ rect_dict = {
 draw_data(extracted_data_dict,
           name='delta_phi',
           _idx=0,
-          _sub_fig_pos=[[0.09, 0.84, 0.85, 0.14],
-                        [0.09, 0.65, 0.85, 0.14],
-                        [0.09, 0.46, 0.85, 0.14],
-                        [0.09, 0.27, 0.85, 0.14],
-                        [0.09, 0.08, 0.85, 0.14]],
-          _x_lim=(-20, 110),
-          _y_title=r'$\Delta\phi$[$rad/100ms$]',
-          _x_title='time[ms]',
+          _sub_fig_pos=[
+              [0.09, 0.80, 0.85, 0.14],
+              [0.09, 0.60, 0.85, 0.20],
+              [0.09, 0.40, 0.85, 0.20],
+              [0.09, 0.20, 0.85, 0.20],
+              [0.09, 0.00, 0.85, 0.20]
+          ],
+          _x_lim=(-0, 110),
+          _y_title=r'$\Delta\phi$[$rad/100ms$]' if LANG == 'EN' else r'航向角变化率[$\mathrm{rad/s}$]',
+          _x_title='time[ms]' if LANG == 'EN' else '时间[0.1$\mathrm{s}$]',
           _y_lim=(-0.15, 0.15),
-          _insert_axes=delta_phi_insert_dict,
-          _rect_dict=rect_dict,
-          _save_name='output_dir/figs/delta_phi.svg'
+          # _insert_axes=delta_phi_insert_dict,
+          # _rect_dict=rect_dict,
+          _save_name='output_dir/figs/delta_phi.svg',
+          _draw_title=True
           )
-
 
 pass

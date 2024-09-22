@@ -2,23 +2,39 @@ import numpy as np
 from typing import Tuple, Dict, Callable, List
 import osqp
 from dynamic_models import LongitudeModel
-from utilits import VData, TrajDataGenerator, suppress_stdout_stderr, PickleRead, PickleSave
+from utilits import VData, TrajDataGenerator, suppress_stdout_stderr, PickleRead, PickleSave, veh_constrain
 from scipy import sparse
 import tqdm
+import matplotlib.pyplot as plt
+import time
 
+
+WHAT = 'T'
+LANG = 'EN'
+# plt.rcParams['font.family'] = 'Times New Roman'
+# plt.rcParams['font.sans-serif'] = 'Microsoft YaHei'
+# plt.rcParams['axes.unicode_minus'] = False
+just_neighbor = False
+
+y_var_list = list()
+run_time = list()
 
 class ADMM:
     _all_y: List[np.ndarray] = list()
 
+    @property
+    def data(self):
+        return self._data
+
     @classmethod
     def communicate(cls):
         cls._all_y.clear()
-        for admm in _all_ADMM:
+        for admm in all_ADMM:
             cls._all_y.append(admm._y.copy())
 
     def __init__(self, config: VData):
         self._data = config
-        _all_ADMM.append(self)
+        all_ADMM.append(self)
 
         self._osqp = osqp.OSQP()
         self._K, self._B = LongitudeModel.gen_M_N(self._data.T)
@@ -35,22 +51,52 @@ class ADMM:
 
         # self._init_osqp()
 
+    def _get_neighbors_y(self) -> List[np.ndarray]:
+        result = []
+        for admm in all_ADMM:
+            if admm._data.vid in self._data.neighbors:
+                result.append(admm._y)
+        assert 1 <= len(result) <= 4
+        return result
+
     def _gen_M_lu(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        M = np.zeros((3, self._data.T * 3))
-        M[0, 1: self._data.tdvp[0] * 3: 3] = 1.0 / (self._data.tdvp[0])
-        M[1, 1: self._data.tdvq[0] * 3: 3] = 1.0 / (self._data.tdvp[0])
-        M[2, 1: self._data.tdf[0] * 3: 3] = 1.0 / (self._data.tdf[0])
-        l_pos = np.array([
-            10 * (self._data.tdvp[1] - self.X_0[0]) / (self._data.tdvp[0] - self._data.tx0[0]),
-            -np.inf,
-            10 * (self._data.tdf[1] - self.X_0[0]) / (self._data.tdf[0] - self._data.tx0[0]) if self._data.last
-            else -np.inf
-        ])
-        u_pos = np.array([
-            np.inf,
-            10 * (self._data.tdvq[1] - self.X_0[0]) / (self._data.tdvq[0] - self._data.tx0[0]),
-            np.inf
-        ])
+        if veh_constrain:
+            M = np.zeros((3, self._data.T * 3))
+            M[0, 1: self._data.tdvp[0] * 3: 3] = 1.0 / (self._data.tdvp[0])
+            M[1, 1: self._data.tdvq[0] * 3: 3] = 1.0 / (self._data.tdvq[0])
+            M[2, 1: self._data.tdf[0] * 3: 3] = 1.0 / (self._data.tdf[0])
+            l_pos = np.array([
+                10 * (self._data.tdvp[1] - self.X_0[0]) / (self._data.tdvp[0] - self._data.tx0[0]),
+                -np.inf,
+                10 * (self._data.tdf[1][0] - self.X_0[0]) / (self._data.tdf[0] - self._data.tx0[0])
+                # 10 * (self._data.tdf[1] - self.X_0[0]) / (self._data.tdf[0] - self._data.tx0[0]) if self._data.last
+                # else -np.inf
+            ])
+            u_pos = np.array([
+                np.inf,
+                10 * (self._data.tdvq[1] - self.X_0[0]) / (self._data.tdvq[0] - self._data.tx0[0]),
+                10 * (self._data.tdf[1][1] - self.X_0[0]) / (self._data.tdf[0] - self._data.tx0[0])
+                # np.inf
+            ])
+        else:
+            M = np.zeros((3, self._data.T * 3))
+            M[0, self._data.tdvp[0] * 3] = 1.0
+            M[1, self._data.tdvq[0] * 3] = 1.0
+            M[2, self._data.tdf[0] * 3-3] = 1.0
+            l_pos = np.array([
+                self._data.tdvp[1],
+                -np.inf,
+                self._data.tdf[1][0]
+                # 10 * (self._data.tdf[1] - self.X_0[0]) / (self._data.tdf[0] - self._data.tx0[0]) if self._data.last
+                # else -np.inf
+            ])
+            u_pos = np.array([
+                np.inf,
+                self._data.tdvq[1],
+                self._data.tdf[1][1]
+                # np.inf
+            ])
+
         return M, l_pos, u_pos
 
     def _gen_G_H(self) -> Tuple[np.ndarray, np.ndarray]:
@@ -121,6 +167,7 @@ class ADMM:
         return self._x
 
     def step(self):
+        start_time = time.time()
         # p
         self._p = self._p + self._data.rho * sum([self._y - oy for oy in self._all_y])
         # q
@@ -135,6 +182,8 @@ class ADMM:
         self._y = (self._A_i @ self._x + self._r) / (self._data.sigma + 2 * self._data.rho * self._data.d_i)
         # z
         self._z = np.clip(self._y + self._s / self._data.sigma, -np.inf, 0)
+        end_time = time.time()
+        return end_time - start_time
 
     def _update_rs(self, rho: float, sigma: float):
         self._data.rho = rho
@@ -144,14 +193,18 @@ class ADMM:
     def STEP(cls, rho_sigma: Tuple[float, float] = None) -> Dict[int, Tuple[str, np.ndarray, np.ndarray]]:
         ADMM.communicate()
         ret_dict = dict()
-        for admm in _all_ADMM:
+        run_time_list = list()
+        for admm in all_ADMM:
             if rho_sigma is not None:
                 admm._update_rs(rho_sigma[0], rho_sigma[1])
-            admm.step()
+            run_time_list.append(admm.step())
             u = admm._x.copy()
             s = (LongitudeModel.M() @ admm.X_0 + LongitudeModel.N() @ admm.results).reshape((-1, 3))
             road = admm._data.road
             ret_dict[admm._data.vid] = (road, u, s)
+        print(np.sum(np.var(cls._all_y, axis=0)))
+        y_var_list.append(np.sum(np.var(cls._all_y, axis=0)))
+        run_time.append([np.sum(run_time_list), np.mean(run_time_list)])
         return ret_dict
 
     @classmethod
@@ -164,6 +217,8 @@ class ADMM:
                 ALL_DATA.append(cls.STEP(rho_sigma_list[step]))
             else:
                 ALL_DATA.append(cls.STEP())
+        all = np.array(run_time)
+        print(np.mean(all[:, 1]), np.sum(all[:, 1]))
         return ALL_DATA
 
     @property
@@ -178,36 +233,65 @@ class ADMM:
     def X_0(self):
         return self._data.tx0[1]
 
+    @property
+    def x(self):
+        return self._x
 
-_all_ADMM: List[ADMM] = list()
+    @staticmethod
+    def plot_y_var():
+        fig, ax = plt.subplots(figsize=(10, 5))
+        ax.plot(y_var_list[1:])
+        plt.yscale('log')
+        plt.xlabel('迭代次数' if LANG == 'CN' else 'Iterations')
+        plt.ylabel('$\mathrm{y^{i,k}}$的方差' if LANG == 'CN' else 'Var$(y^{i,k})$')
+        plt.grid()
+        plt.show()
+        plt.savefig('output_dir/traj_plan/方差.svg', dpi=300, bbox_inches='tight', pad_inches=.1)
+        plt.close()
+
+
+all_ADMM: List[ADMM] = list()
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
 
-    rho_sigma_list = [(50000.0, 50000.0) for _ in range(10)]
+    rho_sigma_list = [(1e-1, 1e-1)] + [(1e-1, 1e-1)]*2 + [(1e+0, 1e+0)]*10 + [(1e+1, 1e+1)]* 10 + [(1e+2, 1e+2)]* 30
+                     # [(1e+1, 1e+1) for _ in range(10)]
+    custom_rho_sigma_num = len(rho_sigma_list)
 
     LongitudeModel.initialize(LongitudeModel.default_config)
-    generator = TrajDataGenerator(100, 50, 150, 110, 150, 10, 20, 15, (-3, 3), (-7, 7), sigma=5, rho=5)
+    generator = TrajDataGenerator(100, 50, 150, 110, 150, 10, 20, 15, (-5, 5), (-5, 5), sigma=5, rho=5, safe_dist=10)
     _, trajs = generator.generate_all_vdata()
 
-    iter_times = 100
-    rho_sigma_list = rho_sigma_list + [(0.5, 0.5) for _ in range(iter_times - len(rho_sigma_list))]
+    iter_times = len(rho_sigma_list)
+    # rho_sigma_list = rho_sigma_list + [(1e-3, 1e-3) for _ in range(iter_times - custom_rho_sigma_num)]
 
-    PickleSave(trajs, '../output_dir/temp01')
+    # PickleSave(trajs, '../output_dir/temp01')
     # trajs = PickleRead('../output_dir/temp01')
     for vid, vdata in trajs.items():
         ADMM(vdata)
 
     all_info = ADMM.STEP_ALL(iter_times, rho_sigma_list=rho_sigma_list)
 
+    save_list = [_ for _ in range(iter_times)][-1:]
     for i, one_step_info in enumerate(all_info):
-        if (i + 1) % 10 == 0:
+        if i in save_list:
+            plt.plot([0, 100], [110, 110], color='black')
+            plt.plot([0, 100], [150, 150], color='black')
             for v_id, one_traj in one_step_info.items():
                 road, u, s = one_traj
                 plt.plot(
-                    one_traj[2][:, 0],
-                    color='red' if road == 'main' else 'green'
+                    one_traj[2][:, 1],
+                    # color='red' if road == 'main' else 'green',
+                    color='black',
+                    linestyle='-' if road == 'main' else '--',
+                    lw=0.5
                 )
+            for admm in all_ADMM:
+                plt.plot([admm.data.tdvp[0], admm.data.tdvp[0]], [0, 250], color='black', lw=0.5)
             plt.savefig('../output_dir/traj_plan/traj_plan_{}.jpg'.format(i))
             plt.close()
+    for admm in all_ADMM:
+        plt.plot(admm.x, color='black', lw=0.5)
+    plt.show()
     pass

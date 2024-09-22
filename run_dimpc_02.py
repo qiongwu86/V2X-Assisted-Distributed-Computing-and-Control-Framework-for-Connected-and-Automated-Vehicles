@@ -2,10 +2,18 @@ from dynamic_models import KinematicModel
 from all_solvers import DistributedMPC
 from utilits import *
 import numpy as np
+import matplotlib.pyplot as plt
+
+plt.rcParams.update({'font.size': 20,
+                     "text.usetex": True})
+
+WHAT = '12'
+LANG = 'EN'
+plt.rcParams['font.family'] = 'Times New Roman'
 
 mpc_config = DistributedMPC.default_config
 mpc_config['run_iter'] = 3
-mpc_config['safe_factor'] = 8
+mpc_config['safe_factor'] = 1
 mpc_config['safe_th'] = 2.5
 mpc_config['pred_len'] = 30
 mpc_config['other_veh_num'] = 11
@@ -32,7 +40,7 @@ for car_id_, traj in enumerate(trajs):
 
 all_info = DistributedMPC.simulate()
 
-gen_video_from_info(all_info, trajs, draw_nominal=True, _map_info=map_info, save_frame=True,
+gen_video_from_info(all_info, trajs, draw_nominal=True, _map_info=map_info, save_frame=False,
                     _draw_all_nominal=False,
                     _custom_lim=((-20, 20), (-20, 5))
                     )

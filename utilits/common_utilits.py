@@ -1,5 +1,5 @@
 import os
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Text
 import numpy as np
 import pickle
 
@@ -103,9 +103,12 @@ def PickleSave(thing, name: str) -> None:
 
 
 def PickleRead(name: str):
-    with open(name, 'rb') as f:
-        obj = pickle.load(f)
-    return obj
+    try:
+        with open(name, 'rb') as f:
+            obj = pickle.load(f)
+        return obj
+    except:
+        return None
 
 
 def moving_average_filter(data, window_size):
@@ -117,3 +120,15 @@ def moving_average_filter(data, window_size):
     """
     window = np.ones(window_size) / window_size
     return np.convolve(data, window, mode='same')
+
+
+def en_to_cn(_en: Text):
+    _dict={
+        "proposed": "本文算法",
+        "OSQP-CS": "OSQP-CS",
+        "IPOPT": "IPOPT",
+        "LD-IPOPT": "线性-IPOPT",
+        "SQP": "SQP",
+        "Our": "本文算法"
+    }
+    return _dict[_en]

@@ -79,12 +79,12 @@ class DistributedMPC:
 
     @classmethod
     def _gen_Q_comfort(cls) -> np.ndarray:
-        Q_comfort = np.zeros((cls._pred_len-1, cls._pred_len*4))
+        Q_comfort = np.zeros((2*(cls._pred_len-1), cls._pred_len*4))
         for i in range(cls._pred_len-1):
-            Q_comfort[i, i * 4 + 2] = -cls._comfort[0]
-            Q_comfort[i, i * 4 + 3] = -cls._comfort[1]
-            Q_comfort[i, (i + 1) * 4 + 2] = cls._comfort[0]
-            Q_comfort[i, (i + 1) * 4 + 3] = cls._comfort[1]
+            Q_comfort[i*2, i * 4 + 2] = -cls._comfort[0]
+            Q_comfort[i*2+1, i * 4 + 3] = -cls._comfort[1]
+            Q_comfort[i*2, (i + 1) * 4 + 2] = cls._comfort[0]
+            Q_comfort[i*2+1, (i + 1) * 4 + 3] = cls._comfort[1]
         return Q_comfort
 
     def __init__(self, init_state: np.ndarray, ref_traj: np.ndarray, mpc_id: int):
@@ -179,10 +179,10 @@ class DistributedMPC:
         assert isinstance(bs, list) and all([b.shape == (self._pred_len * 4,) for b in bs])
         x_ref = self._ref_traj[self._t+1: self._t+1+self._pred_len].reshape(-1)
 
-        MAT_1 = self._Qx_big + sum([k.transpose() @ k for k in ks]) + self._Q_comfort.transpose() @ self._Q_comfort
+        MAT_1 = self._Qx_big + self._safe_factor * sum([k.transpose() @ k for k in ks]) + self._Q_comfort.transpose() @ self._Q_comfort
         P = sparse.csc_matrix(B.transpose() @ MAT_1 @ B + self._Qu_big)
         Q = B.transpose() @ (
-                MAT_1 @ (A @ self._x_t + G) + sum([k.transpose()@b for k, b in zip(ks, bs)]) - self._Qx_big @ x_ref
+                MAT_1 @ (A @ self._x_t + G) + self._safe_factor * sum([k.transpose()@b for k, b in zip(ks, bs)]) - self._Qx_big @ x_ref
         )
 
         '''

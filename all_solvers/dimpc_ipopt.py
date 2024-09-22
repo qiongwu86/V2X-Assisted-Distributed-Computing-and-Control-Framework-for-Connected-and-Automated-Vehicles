@@ -263,7 +263,7 @@ class DistributedMPCIPOPT:
     def _init_nominal(self):
         # with suppress_stdout_stderr():
         #     self._solve_ego_prob()
-        print("vehicle {} init complete. We do not initial nominal.".format(self._mpc_id))
+        print("vehicle {} init complete.".format(self._mpc_id))
 
     def get_nominal(self) -> Tuple[np.ndarray, np.ndarray]:
         return self._x_nominal, self._u_nominal
